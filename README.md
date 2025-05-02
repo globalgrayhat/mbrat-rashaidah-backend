@@ -1,10 +1,10 @@
-# NestJS Backend with Supabase Authentication
+# NestJS Backend with passport Authentication
 
-This is a NestJS backend application that uses Supabase for authentication and PostgreSQL with TypeORM for data management.
+This is a NestJS backend application that uses passport for authentication and PostgreSQL with TypeORM for data management.
 
 ## Features
 
-- User authentication with Supabase
+- User authentication with passport
 - JWT-based session management
 - Role-based access control
 - Admin dashboard with user management
@@ -15,7 +15,7 @@ This is a NestJS backend application that uses Supabase for authentication and P
 
 - Node.js (v14 or higher)
 - PostgreSQL database
-- Supabase account and project
+- passport account and project
 
 ## Installation
 
@@ -78,8 +78,8 @@ npm run start:prod
 
 - GET /admin/users - List all users (admin only)
 - GET /admin/users/:id - Get user details (admin only)
-- POST /admin/users/:id/role - Update user role (admin only)
-- DELETE /admin/users/:id - Delete user (admin only)
+- POST /admin/users/:id/role - Update user role (super_admin only)
+- DELETE /admin/users/:id - Delete user (super_admin only)
 
 ## Security Features
 
@@ -93,21 +93,5 @@ npm run start:prod
 ## Project Structure
 
 ```
-src/
-├── auth/                 # Authentication module
-├── admin/               # Admin module
-├── config/              # Configuration
-├── entities/            # TypeORM entities
-├── guards/              # Authentication guards
-├── interceptors/        # Response interceptors
-├── middlewares/         # Request middlewares
-└── supabase/            # Supabase service
+
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a new Pull Request
