@@ -15,7 +15,6 @@ This is a NestJS backend application that uses passport for authentication and P
 
 - Node.js (v14 or higher)
 - PostgreSQL database
-- passport account and project
 
 ## Installation
 
