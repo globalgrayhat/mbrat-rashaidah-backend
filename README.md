@@ -22,28 +22,40 @@ This is a NestJS backend application that uses passport for authentication and P
 1. Clone the repository:
 
 ```bash
-git clone <repository-url>
-cd <project-directory>
+git clone https://github.com/globalgrayhat/mbrat-rashaidah-backend.git
+cd mbrat-rashaidah-backend
 ```
 
 2. Install dependencies:
 
 ```bash
-npm install
+npm i
 ```
 
 3. Create a `.env` file in the root directory with the following variables:
 
 ```env
-PORT=3000
-DB_HOST=localhost
-DB_PORT=5432
-DB_USERNAME=postgres
-DB_PASSWORD=your_password
-DB_NAME=your_database
-JWT_SECRET=your_jwt_secret_key
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_key
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=root
+POSTGRES_DB=mbrat-rashaidah
+# JWT access token
+JWT_ACCESS_SECRET=your_jwt_secret
+JWT_EXPIRATION=1h
+# JWT access token
+JWT_REFRESH_SECRET=my_refresh_token_secret_456
+JWT_REFRESH_EXPIRATION=1d
+# OTP
+OTP_ENABLED=false
+# Mail
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=465
+MAIL_SECURE=SSL
+MAIL_USER=studentofthecourse@gmail.com
+MAIL_PASS=yhhgiggfgfggfgfg
+MAIL_FROM=studentofthecourse@gmail.com
+MAIL_FROM_NAME=No‑Reply
 ```
 
 4. Set up the database:
