@@ -13,63 +13,63 @@ This is a NestJS backend application that uses passport for authentication and P
 
 ## 📦 Platform Features
 
-* ✅ **User & Account Management**
+- ✅ **User & Account Management**
 
-  * User registration and login
-  * OTP verification for added security
-  * Token refresh and JWT session handling
-  * Admin dashboard with role and access control
+  - User registration and login
+  - OTP verification for added security
+  - Token refresh and JWT session handling
+  - Admin dashboard with role and access control
 
-* 🏗️ **Charity Project Management**
+- 🏗️ **Charity Project Management**
 
-  * Create, update, and delete projects
-  * Filter by category, country, or status
-  * View detailed project information and statistics
+  - Create, update, and delete projects
+  - Filter by category, country, or status
+  - View detailed project information and statistics
 
-* 🎯 **Campaigns Module**
+- 🎯 **Campaigns Module**
 
-  * Launch and manage fundraising campaigns
-  * Link campaigns to specific projects
-  * Full CRUD support for campaigns
+  - Launch and manage fundraising campaigns
+  - Link campaigns to specific projects
+  - Full CRUD support for campaigns
 
-* 💸 **Donations System**
+- 💸 **Donations System**
 
-  * Donate directly to specific projects
-  * View and manage individual donations
-  * Integration with **Stripe** and **MyFatoora** for secure payments
-  * Webhook support for real-time payment updates
+  - Donate directly to specific projects
+  - View and manage individual donations
+  - Integration with **Stripe** and **MyFatoora** for secure payments
+  - Webhook support for real-time payment updates
 
-* 🌍 **Geographical Classification**
+- 🌍 **Geographical Classification**
 
-  * Manage countries and continents
-  * Assign projects to specific regions
+  - Manage countries and continents
+  - Assign projects to specific regions
 
-* 🧭 **Categories Management**
+- 🧭 **Categories Management**
 
-  * Define and manage categories for projects
-  * Support for slug-based lookup and filtering
+  - Define and manage categories for projects
+  - Support for slug-based lookup and filtering
 
-* 📢 **Banner & Promotion System**
+- 📢 **Banner & Promotion System**
 
-  * Manage promotional banners across the platform
-  * Upload media and assign to banners
+  - Manage promotional banners across the platform
+  - Upload media and assign to banners
 
-* 🖼️ **Media Library**
+- 🖼️ **Media Library**
 
-  * Upload and manage images and media files
-  * View raw media data and metadata
+  - Upload and manage images and media files
+  - View raw media data and metadata
 
-* ✉️ **Email Integration**
+- ✉️ **Email Integration**
 
-  * Send verification or notification emails
-  * SMTP configuration via environment variables
+  - Send verification or notification emails
+  - SMTP configuration via environment variables
 
-* 🛡️ **Security & Access Control**
+- 🛡️ **Security & Access Control**
 
-  * JWT-based authentication
-  * Role-based permissions (user, admin, super\_admin)
-  * Request validation and password encryption
-  * Protected admin routes
+  - JWT-based authentication
+  - Role-based permissions (user, admin, super_admin)
+  - Request validation and password encryption
+  - Protected admin routes
 
 ## Prerequisites
 
