@@ -25,7 +25,6 @@ async function bootstrap() {
   );
   // Global traffic interceptor
   app.useGlobalInterceptors(app.get(TrafficInterceptor));
-  await app.listen(process.env.APP_PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
-//
