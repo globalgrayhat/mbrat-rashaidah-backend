@@ -67,7 +67,7 @@ export class AppConfigService {
   get otpEnabled(): boolean {
     return this.configService.get<string>('OTP_ENABLED', 'false') === 'true';
   }
-  /** Enable or disable OTP feature */
+  /** Set time to OTP */
   get otpExpiresIn(): number {
     return this.configService.get<number>('EXP_MINUTES', 1);
   }
