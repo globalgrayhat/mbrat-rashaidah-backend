@@ -111,6 +111,7 @@ JWT_REFRESH_SECRET=my_refresh_token_secret_456
 JWT_REFRESH_EXPIRATION=1d
 # OTP
 OTP_ENABLED=false
+EXP_MINUTES=2
 # Mail
 MAIL_HOST=smtp.gmail.com
 MAIL_PORT=465
