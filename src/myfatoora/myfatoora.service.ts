@@ -13,7 +13,7 @@ import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { Donation, DonationStatusEnum } from '../donations/entities/donation.entity';
+import { Donation } from '../donations/entities/donation.entity';
 import { Project } from '../projects/entities/project.entity';
 import {
   MyFatooraConfig,
@@ -28,6 +28,7 @@ import {
   PaymentResult,
   PaymentStatus,
 } from '../common/interfaces/payment-service.interface';
+import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
 
 @Injectable()
 export class MyFatooraService {

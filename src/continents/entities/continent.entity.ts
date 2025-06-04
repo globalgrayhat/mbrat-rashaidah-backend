@@ -7,7 +7,6 @@ import {
   OneToMany,
 } from 'typeorm';
 
-// Ensure correct path for this import
 import { Country } from '../../countries/entities/country.entity';
 
 @Entity('continents')

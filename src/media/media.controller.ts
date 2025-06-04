@@ -16,22 +16,28 @@ import {
   Res,
   StreamableFile,
   BadRequestException,
-
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { MediaService } from './media.service';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
-import { MediaType } from './entities/media.entity';
+import { MediaType } from '../common/constants/media.constant';
 import { MimeTypesValidator } from '../common/validators/mime-types.validator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/constants/roles.constant';
 
 @Controller('media')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class MediaController {
 
   constructor(private readonly mediaService: MediaService) {}
 
   @Post('upload')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
     @UploadedFile(
@@ -101,11 +107,13 @@ export class MediaController {
   }
 
   @Patch(':id')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   update(@Param('id') id: string, @Body() updateMediaDto: UpdateMediaDto) {
     return this.mediaService.update(id, updateMediaDto);
   }
 
   @Delete(':id')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   remove(@Param('id') id: string) {
     return this.mediaService.remove(id);
   }

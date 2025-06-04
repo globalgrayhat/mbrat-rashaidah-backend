@@ -10,19 +10,9 @@ import {
 } from 'typeorm';
 import { Project } from '../../projects/entities/project.entity';
 import { User } from '../../user/entities/user.entity';
+import { CampaignPurposeEnum } from '../../common/constants/campaignPurpose.constant';
+import { CampaignStatusEnum } from '../../common/constants/campaignStatus.constant';
 
-export enum CampaignStatusEnum {
-  ACTIVE = 'active',
-  COMPLETED = 'completed',
-  INACTIVE = 'inactive',
-}
-
-export enum CampaignPurposeEnum {
-  CHARITY = 'charity',
-  EDUCATION = 'education',
-  HEALTH = 'health',
-  OTHER = 'other',
-}
 
 @Entity('campaigns')
 export class Campaign {

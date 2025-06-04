@@ -5,26 +5,20 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { CreateDonationDto } from './dto/create-donation.dto';
+import { createDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
-import {
-  Donation,
-  DonationStatusEnum,
-  PaymentMethodEnum,
-} from './entities/donation.entity';
+import { Donation } from './entities/donation.entity';
 import { Project } from '../projects/entities/project.entity';
 import { User } from '../user/entities/user.entity';
 import { StripeService } from '../stripe/stripe.service';
 import { MyFatooraService } from '../myfatoora/myfatoora.service';
-import {
-  PaymentCreateInput,
-  PaymentResult,
-  PaymentStatus,
-} from '../common/interfaces/payment-service.interface';
+import { PaymentResult } from '../common/interfaces/payment-service.interface';
 import {
   StripeEvent,
   MyFatooraEvent,
 } from '../common/interfaces/payment.interface';
+import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
+import { PaymentMethodEnum } from '../common/constants/payment.constant';
 
 @Injectable()
 export class DonationsService {
@@ -41,7 +35,7 @@ export class DonationsService {
   ) {}
 
   // Create a donation and initiate payment
-  async create(createDonationDto: CreateDonationDto) {
+  async create(createDonationDto: createDonationDto) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

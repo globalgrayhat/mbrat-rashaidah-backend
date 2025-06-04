@@ -7,7 +7,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class CreateDonationDto {
+export class createDonationDto {
   @IsNumber()
   @IsNotEmpty()
   @Type(() => Number)

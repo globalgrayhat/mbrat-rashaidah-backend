@@ -9,10 +9,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
-import { Campaign, CampaignStatusEnum } from './entities/campaign.entity';
+import { Campaign } from './entities/campaign.entity';
+import { CampaignStatusEnum } from '../common/constants/campaignStatus.constant'; 
 import { User } from '../user/entities/user.entity';
 import { CreateCampaignDto } from './dto/createCampaignDto';
-import { EditCampaignDto } from './dto/editCampaignDto';
+import { UpdateCampaignDto } from './dto/UpdateCampaignDto';
 
 @Injectable()
 export class CampaignsService {
@@ -90,10 +91,10 @@ export class CampaignsService {
   }
 
   // Edit campaign
-  async editCampaign(id: string, editCampaignDto: EditCampaignDto) {
+  async editCampaign(id: string, UpdateCampaignDto: UpdateCampaignDto) {
     const campaign = await this.campaignRepo.findOne({ where: { id } });
     if (!campaign) throw new NotFoundException('Campaign not found');
-    Object.assign(campaign, editCampaignDto);
+    Object.assign(campaign, UpdateCampaignDto);
     await this.campaignRepo.save(campaign);
     return campaign;
   }

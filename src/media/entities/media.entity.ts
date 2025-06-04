@@ -1,5 +1,3 @@
-// [FIXED 2025-06-04] Media Entity – Base64 Storage Implementation
-
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -14,13 +12,8 @@ import {
 import { User } from '../../user/entities/user.entity';
 import { Project } from '../../projects/entities/project.entity';
 import { Banner } from '../../banners/entities/banner.entity';
+import { MediaType } from '../../common/constants/media.constant';
 
-export enum MediaType {
-  IMAGE = 'IMAGE',
-  VIDEO = 'VIDEO',
-  AUDIO = 'AUDIO',
-  DOCUMENT = 'DOCUMENT',
-}
 
 @Entity('media')
 export class Media {

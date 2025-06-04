@@ -1,4 +1,4 @@
-// [FIXED 2025-06-04]
+
 import {
   BadRequestException,
   ForbiddenException,
@@ -7,16 +7,14 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import {
-  Donation,
-  DonationStatusEnum,
-} from '../donations/entities/donation.entity';
+import { Donation } from '../donations/entities/donation.entity';
 import { Project } from '../projects/entities/project.entity';
 import { Stripe } from 'stripe';
 import {
   PaymentCreateInput,
   PaymentResult,
 } from '../common/interfaces/payment-service.interface';
+import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
 
 @Injectable()
 export class StripeService {

@@ -1,10 +1,5 @@
-import { IsOptional, IsNotEmpty } from 'class-validator';
+import { PartialType } from '@nestjs/mapped-types';
+import { CreateContinentDto } from './create-continent.dto';
 
-export class UpdateContinentDto {
-  @IsOptional()
-  @IsNotEmpty()
-  name?: string;
-
-  @IsOptional()
-  description?: string;
-}
+export class UpdateContinentDto extends PartialType(CreateContinentDto) {}
+// This class extends CreateProjectDto and makes all properties optional.

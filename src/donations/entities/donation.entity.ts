@@ -1,4 +1,3 @@
-// [FIXED 2025-06-04]
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -10,19 +9,8 @@ import {
 } from 'typeorm';
 import { Project } from '../../projects/entities/project.entity';
 import { User } from '../../user/entities/user.entity';
-
-export enum DonationStatusEnum {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  SUCCESSFUL = 'SUCCESSFUL',
-  CANCELLED = 'CANCELLED',
-}
-
-export enum PaymentMethodEnum {
-  STRIPE = 'stripe',
-  MYFATOORA = 'myfatoora',
-}
+import { DonationStatusEnum } from '../../common/constants/donationStatus.constant';
+import { PaymentMethodEnum } from '../../common/constants/payment.constant';
 
 @Entity('donations')
 export class Donation {

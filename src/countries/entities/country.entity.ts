@@ -9,7 +9,6 @@ import {
   JoinColumn,
 } from 'typeorm';
 
-// Ensure correct paths for these imports based on your project structure
 import { Project } from '../../projects/entities/project.entity';
 import { Continent } from '../../continents/entities/continent.entity';
 
@@ -39,7 +38,7 @@ export class Country {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'uuid' }) // Make sure the column type matches the Continent ID type
+  @Column({ type: 'uuid' })
   continentId: string;
 
   @ManyToOne(() => Continent)

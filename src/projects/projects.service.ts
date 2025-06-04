@@ -2,13 +2,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Project, ProjectStatus } from './entities/project.entity';
+import { Project } from './entities/project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { Category } from '../categories/entities/category.entity';
 import { Country } from '../countries/entities/country.entity';
 import { Continent } from '../continents/entities/continent.entity';
 import { Media } from '../media/entities/media.entity';
+import { ProjectStatus } from '../common/constants/project.constant';
 
 @Injectable()
 export class ProjectsService {

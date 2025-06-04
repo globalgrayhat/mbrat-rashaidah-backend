@@ -15,13 +15,8 @@ import { Country } from '../../countries/entities/country.entity';
 import { Continent } from '../../continents/entities/continent.entity';
 import { Media } from '../../media/entities/media.entity';
 import { User } from '../../user/entities/user.entity';
+import { ProjectStatus } from '../../common/constants/project.constant';
 
-export enum ProjectStatus {
-  DRAFT = 'draft',
-  ACTIVE = 'active',
-  COMPLETED = 'completed',
-  CANCELLED = 'cancelled',
-}
 
 @Entity('projects')
 export class Project {

@@ -10,20 +10,21 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { DonationsService } from './donations.service';
-import { CreateDonationDto } from './dto/create-donation.dto';
+import { createDonationDto } from './dto/create-donation.dto';
 import { campaignExistsPipe } from '../common/pipes/campaignExists.pipe';
 import { donationExistsPipe } from '../common/pipes/donationExists.pipe';
-import { JwtGuard } from '../common/guards/jwt.guard';
-import { RoleGuard } from '../common/guards/role.guard';
-import { AuthRolesEnum } from '../common/enums';
-import { Role } from '../common/decorators/role.decorator';
-import { PaymentMethodEnum } from './entities/donation.entity';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/constants/roles.constant';
+import { PaymentMethodEnum } from '../common/constants/payment.constant';
 import {
   StripeEvent,
   MyFatooraEvent,
 } from '../common/interfaces/payment.interface';
 
 @Controller('donations')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class DonationsController {
   constructor(private readonly donationsService: DonationsService) {}
 
@@ -35,7 +36,7 @@ export class DonationsController {
   @Post('project/:projectId')
   async create(
     @Param('projectId', ParseUUIDPipe, campaignExistsPipe) projectId: string,
-    @Body() createDonationDto: CreateDonationDto,
+    @Body() createDonationDto: createDonationDto,
   ) {
     const donation = await this.donationsService.create({
       ...createDonationDto,
@@ -46,15 +47,12 @@ export class DonationsController {
   }
 
   @Get(':id')
-  @UseGuards(JwtGuard, RoleGuard)
-  @Role(AuthRolesEnum.ADMIN)
   findOne(@Param('id', ParseUUIDPipe, donationExistsPipe) id: string) {
     return this.donationsService.findOne(id);
   }
 
   @Delete(':id')
-  @UseGuards(JwtGuard, RoleGuard)
-  @Role(AuthRolesEnum.ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   remove(@Param('id', ParseUUIDPipe, donationExistsPipe) id: string) {
     return this.donationsService.remove(id);
   }

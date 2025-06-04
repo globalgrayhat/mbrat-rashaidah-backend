@@ -8,14 +8,20 @@ import {
   Post,
   Req,
   UsePipes,
+  UseGuards,
 } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import { Request } from 'express';
 import Stripe from 'stripe';
-import { DonationStatusEnum } from '../common/enums/donation-status.enum';
+import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
 import { donationExistsPipe } from '../common/pipes/donationExists.pipe';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/constants/roles.constant';
 
 @Controller('stripe')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class StripeController {
   constructor(private readonly stripe: StripeService) {}
 

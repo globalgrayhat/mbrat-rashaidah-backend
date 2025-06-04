@@ -8,7 +8,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
-import { CampaignPurposeEnum } from '../entities/campaign.entity';
+import { CampaignPurposeEnum } from '../../common/constants/campaignPurpose.constant';
 
 export class CreateCampaignDto {
   @IsNotEmpty()

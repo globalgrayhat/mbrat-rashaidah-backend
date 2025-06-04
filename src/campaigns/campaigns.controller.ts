@@ -18,17 +18,21 @@ import {
 import { CampaignsService } from './campaigns.service';
 import { CreateCampaignDto } from './dto/createCampaignDto';
 import { campaignExistsPipe } from 'src/common/pipes/campaignExists.pipe';
-import { EditCampaignDto } from './dto/editCampaignDto';
-import { AuthRolesEnum, CampaignPurposeEnum } from 'src/common/enums';
-import { JwtGuard } from 'src/common/guards/jwt.guard';
-import { RoleGuard } from 'src/common/guards/role.guard';
-import { Role } from 'src/common/decorators/role.decorator';
+import { UpdateCampaignDto } from './dto/UpdateCampaignDto';
+import { CampaignPurposeEnum } from '../common/constants/campaignPurpose.constant'; 
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/constants/roles.constant';
+
 
 @Controller('campaigns')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class CampaignsController {
   constructor(private readonly campaignsService: CampaignsService) {}
 
   @Get()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   getCampaigns(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query(
@@ -49,9 +53,8 @@ export class CampaignsController {
     );
   }
 
-  @UseGuards(JwtGuard, RoleGuard)
-  @Role(AuthRolesEnum.VERIFIED)
   @Post()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   addCampaign(@Req() req, @Body() createCampaignDto: CreateCampaignDto) {
     const userId: string = req.user.userId;
     return this.campaignsService.addCampaign(createCampaignDto, userId);
@@ -63,19 +66,17 @@ export class CampaignsController {
     return this.campaignsService.getCampaign(id);
   }
 
-  @UseGuards(JwtGuard, RoleGuard)
-  @Role(AuthRolesEnum.CAMPAIGN_OWNER)
   @Put(':id')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @UsePipes(campaignExistsPipe)
   editCampaign(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() editCampaignDto: EditCampaignDto,
+    @Body() UpdateCampaignDto: UpdateCampaignDto,
   ) {
-    return this.campaignsService.editCampaign(id, editCampaignDto);
+    return this.campaignsService.editCampaign(id, UpdateCampaignDto);
   }
 
-  @UseGuards(JwtGuard, RoleGuard)
-  @Role(AuthRolesEnum.CAMPAIGN_OWNER)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @Delete(':id')
   @UsePipes(campaignExistsPipe)
   deleteCampaign(@Param('id', ParseUUIDPipe) id: string) {

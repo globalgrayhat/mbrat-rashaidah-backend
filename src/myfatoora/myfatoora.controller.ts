@@ -1,10 +1,15 @@
-import { Controller, Post, Body, Get, Param, Headers, HttpStatus, UsePipes, ParseIntPipe } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Headers, HttpStatus, UsePipes, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { MyFatooraService } from './myfatoora.service';
 import { MyFatooraWebhookData } from '../common/interfaces/myfatoora.interface';
-import { DonationStatusEnum } from '../common/enums/donation-status.enum';
+import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
 import { donationExistsPipe } from '../common/pipes/donationExists.pipe';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/constants/roles.constant';
 
 @Controller('myfatoora')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class MyFatooraController {
   constructor(private readonly myFatooraService: MyFatooraService) {}
 
