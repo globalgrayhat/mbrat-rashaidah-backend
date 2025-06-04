@@ -4,8 +4,6 @@ import { generateOTP } from '../../common/utils/otp-generator.util';
 import { MailService } from '../../common/mail/mail.service';
 import { AppConfigService } from '../../config/config.service';
 
-const EXP_MINUTES = 10;
-
 @Injectable()
 export class OtpService {
   constructor(
@@ -19,7 +17,7 @@ export class OtpService {
    */
   async createAndSend(email: string): Promise<void> {
     if (!this.cfg.otpEnabled) return;
-
+    const EXP_MINUTES = this.cfg.otpExpiresIn;
     const otp = generateOTP();
     const otpExpires = new Date(Date.now() + EXP_MINUTES * 60_000);
     await this.userService.updateByEmail(email, { otp, otpExpires });
