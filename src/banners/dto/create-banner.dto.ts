@@ -1,11 +1,11 @@
 import {
   IsString,
-  IsUrl,
   IsOptional,
   IsBoolean,
   IsInt,
   Min,
   MaxLength,
+  IsUUID,
 } from 'class-validator';
 
 export class CreateBannerDto {
@@ -17,12 +17,10 @@ export class CreateBannerDto {
   @IsOptional()
   description?: string;
 
-  @IsString()
-  @IsUrl()
-  imageUrl: string;
+  @IsUUID()
+  mediaId: string;
 
   @IsString()
-  @IsUrl()
   @IsOptional()
   linkUrl?: string;
 

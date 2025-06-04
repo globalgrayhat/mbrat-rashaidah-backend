@@ -10,7 +10,7 @@ import { AppConfigService } from '../config/config.service';
 import { LoginDto } from './dto/login.dto';
 import { User } from '../user/entities/user.entity';
 import { OtpService } from '../common/otp/otp.service';
-import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
 
 @Injectable()
 export class AuthService {

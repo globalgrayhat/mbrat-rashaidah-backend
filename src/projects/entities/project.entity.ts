@@ -6,13 +6,22 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-  OneToMany,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 
 import { Category } from '../../categories/entities/category.entity';
 import { Country } from '../../countries/entities/country.entity';
+import { Continent } from '../../continents/entities/continent.entity';
 import { Media } from '../../media/entities/media.entity';
 import { User } from '../../user/entities/user.entity';
+
+export enum ProjectStatus {
+  DRAFT = 'draft',
+  ACTIVE = 'active',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+}
 
 @Entity('projects')
 export class Project {
@@ -43,25 +52,41 @@ export class Project {
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   currentAmount: number;
 
-  @Column({ type: 'uuid' })
-  categoryId: string;
-
-  @ManyToOne(() => Category)
+  @ManyToOne(() => Category, { eager: true })
   @JoinColumn({ name: 'categoryId' })
   category: Category;
 
-  @Column({ type: 'uuid' })
-  countryId: string;
+  @Column()
+  categoryId: string;
 
-  @ManyToOne(() => Country)
+  @ManyToOne(() => Country, { eager: true })
   @JoinColumn({ name: 'countryId' })
   country: Country;
 
-  @OneToMany(() => Media, (media) => media.project)
+  @Column()
+  countryId: string;
+
+  @ManyToOne(() => Continent, { eager: true })
+  @JoinColumn({ name: 'continentId' })
+  continent: Continent;
+
+  @Column()
+  continentId: string;
+
+  @ManyToMany(() => Media, (media) => media.projects)
+  @JoinTable({
+    name: 'project_media',
+    joinColumn: { name: 'projectId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'mediaId', referencedColumnName: 'id' },
+  })
   media: Media[];
 
-  @Column({ default: 'active' })
-  status: string;
+  @Column({
+    type: 'enum',
+    enum: ProjectStatus,
+    default: ProjectStatus.DRAFT,
+  })
+  status: ProjectStatus;
 
   @Column({ default: true })
   isActive: boolean;
@@ -72,6 +97,18 @@ export class Project {
   @Column({ default: 0 })
   donationCount: number;
 
+  @Column({ default: true })
+  isDonationActive: boolean;
+
+  @Column({ default: true })
+  isProgressActive: boolean;
+
+  @Column({ default: true })
+  isTargetAmountActive: boolean;
+
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  donationGoal: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -79,7 +116,7 @@ export class Project {
   updatedAt: Date;
 
   @ManyToOne(() => User, { nullable: true })
-  @JoinColumn({ name: 'createdBy' })
+  @JoinColumn({ name: 'createdById' })
   createdBy: User;
 
   @Column({ nullable: true })

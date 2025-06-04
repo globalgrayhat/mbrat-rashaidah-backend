@@ -16,7 +16,7 @@ export class AdminService {
   }
 
   async findOne(id: string): Promise<User> {
-    const user = await this.repo.findOneBy({ id });
+    const user = await this.repo.findOne({ where: { id } });
     if (!user) throw new NotFoundException(`User with ID ${id} not found`);
     return user;
   }

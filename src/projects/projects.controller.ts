@@ -7,14 +7,17 @@ import {
   Body,
   Param,
   UseGuards,
+  Patch,
+  Query,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
+import { Project, ProjectStatus } from './entities/project.entity';
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard)
@@ -38,7 +41,7 @@ export class ProjectsController {
     return this.projectsService.findOne(id);
   }
 
-  @Put(':id')
+  @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto) {
@@ -53,26 +56,26 @@ export class ProjectsController {
   }
 
   @Get('category/:categoryId')
-  fetchCategoryAjax(@Param('categoryId') categoryId: string) {
+  findByCategory(@Param('categoryId') categoryId: string) {
     return this.projectsService.findByCategory(categoryId);
   }
 
   @Get('country/:countryId')
-  fetchCountryAjax(@Param('countryId') countryId: string) {
+  findByCountry(@Param('countryId') countryId: string) {
     return this.projectsService.findByCountry(countryId);
   }
 
-  @Get('list/:status')
-  fetchProjectListAjax(@Param('status') status: string) {
+  @Get('status/:status')
+  findProjectList(@Param('status') status: ProjectStatus) {
     return this.projectsService.findProjectList(status);
   }
 
   @Get('details/:projectId')
-  fetchProjectDetailsAjax(@Param('projectId') projectId: string) {
+  findProjectDetails(@Param('projectId') projectId: string) {
     return this.projectsService.findProjectDetails(projectId);
   }
 
-  @Get('stats')
+  @Get('stats/summary')
   getProjectStats() {
     return this.projectsService.getProjectStats();
   }

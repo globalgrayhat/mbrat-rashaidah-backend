@@ -12,9 +12,9 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { OtpVerifyDto } from './dto/otp-verify.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthGuard } from '@nestjs/passport';
-import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
 
 @Controller('auth')
 export class AuthController {

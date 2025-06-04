@@ -1,24 +1,81 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+// [FIXED 2025-06-04]
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Project } from './entities/project.entity';
+import { Project, ProjectStatus } from './entities/project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { Category } from '../categories/entities/category.entity';
+import { Country } from '../countries/entities/country.entity';
+import { Continent } from '../continents/entities/continent.entity';
+import { Media } from '../media/entities/media.entity';
 
 @Injectable()
 export class ProjectsService {
   constructor(
     @InjectRepository(Project)
     private readonly projectRepository: Repository<Project>,
+    @InjectRepository(Category)
+    private readonly categoryRepository: Repository<Category>,
+    @InjectRepository(Country)
+    private readonly countryRepository: Repository<Country>,
+    @InjectRepository(Continent)
+    private readonly continentRepository: Repository<Continent>,
+    @InjectRepository(Media)
+    private readonly mediaRepository: Repository<Media>,
   ) {}
 
   async create(createProjectDto: CreateProjectDto): Promise<Project> {
-    const project = this.projectRepository.create(createProjectDto);
-    return await this.projectRepository.save(project);
+    const { categoryId, countryId, continentId, mediaIds = [] } = createProjectDto;
+
+    // Verify category exists
+    const category = await this.categoryRepository.findOne({
+      where: { id: categoryId },
+    });
+    if (!category) {
+      throw new NotFoundException(`Category with ID ${categoryId} not found`);
+    }
+
+    // Verify country exists
+    const country = await this.countryRepository.findOne({
+      where: { id: countryId },
+    });
+    if (!country) {
+      throw new NotFoundException(`Country with ID ${countryId} not found`);
+    }
+
+    // Verify continent exists
+    const continent = await this.continentRepository.findOne({
+      where: { id: continentId },
+    });
+    if (!continent) {
+      throw new NotFoundException(`Continent with ID ${continentId} not found`);
+    }
+
+    // Create project
+    const project = this.projectRepository.create({
+      ...createProjectDto,
+      categoryId,
+      countryId,
+      continentId,
+      status: ProjectStatus.DRAFT,
+    });
+
+    // Attach media if provided
+    if (mediaIds.length > 0) {
+      const medias = await this.mediaRepository.findByIds(mediaIds);
+      if (medias.length !== mediaIds.length) {
+        throw new NotFoundException('One or more media items not found');
+      }
+      project.media = medias;
+    }
+
+    return this.projectRepository.save(project);
   }
 
   async findAll(): Promise<Project[]> {
     return await this.projectRepository.find({
+      relations: ['category', 'country', 'continent', 'media'],
       order: {
         createdAt: 'DESC',
       },
@@ -26,7 +83,10 @@ export class ProjectsService {
   }
 
   async findOne(id: string): Promise<Project> {
-    const project = await this.projectRepository.findOne({ where: { id } });
+    const project = await this.projectRepository.findOne({
+      where: { id },
+      relations: ['category', 'country', 'continent', 'media'],
+    });
     if (!project) {
       throw new NotFoundException(`Project with ID ${id} not found`);
     }
@@ -49,6 +109,7 @@ export class ProjectsService {
   async findByCategory(categoryId: string): Promise<Project[]> {
     const projects = await this.projectRepository.find({
       where: { categoryId },
+      relations: ['category', 'country', 'continent', 'media'],
       order: { createdAt: 'DESC' },
     });
     return projects;
@@ -57,14 +118,16 @@ export class ProjectsService {
   async findByCountry(countryId: string): Promise<Project[]> {
     const projects = await this.projectRepository.find({
       where: { countryId },
+      relations: ['category', 'country', 'continent', 'media'],
       order: { createdAt: 'DESC' },
     });
     return projects;
   }
 
-  async findProjectList(status: string): Promise<Project[]> {
+  async findProjectList(status: ProjectStatus): Promise<Project[]> {
     const projects = await this.projectRepository.find({
       where: { status },
+      relations: ['category', 'country', 'continent', 'media'],
       order: { createdAt: 'DESC' },
     });
     return projects;
@@ -73,7 +136,7 @@ export class ProjectsService {
   async findProjectDetails(projectId: string): Promise<Project> {
     const project = await this.projectRepository.findOne({
       where: { id: projectId },
-      relations: ['category', 'country', 'media'],
+      relations: ['category', 'country', 'continent', 'media'],
     });
     if (!project) {
       throw new NotFoundException(`Project with ID ${projectId} not found`);

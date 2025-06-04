@@ -1,3 +1,5 @@
+// [FIXED 2025-06-04] Media Entity – Base64 Storage Implementation
+
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -6,36 +8,56 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  ManyToMany,
 } from 'typeorm';
 
 import { User } from '../../user/entities/user.entity';
 import { Project } from '../../projects/entities/project.entity';
+import { Banner } from '../../banners/entities/banner.entity';
+
+export enum MediaType {
+  IMAGE = 'IMAGE',
+  VIDEO = 'VIDEO',
+  AUDIO = 'AUDIO',
+  DOCUMENT = 'DOCUMENT',
+}
 
 @Entity('media')
 export class Media {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
-  title: string;
+  @Column('text')
+  data: string; // Base64 encoded file data
+
+  @Column({ length: 100 })
+  mimeType: string;
 
   @Column()
-  type: string;
+  size: number;
 
-  @Column()
-  url: string;
+  @Column({
+    type: 'enum',
+    enum: MediaType,
+    default: MediaType.IMAGE,
+  })
+  type: MediaType;
 
   @Column({ nullable: true })
-  thumbnailUrl: string;
+  altText?: string;
 
-  @Column('text', { nullable: true })
-  description: string;
+  @ManyToMany(() => Project, (project) => project.media)
+  projects: Project[];
+
+  @ManyToOne(() => Banner, (banner) => banner.media, {
+    nullable: true,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'bannerId' })
+  banner?: Banner;
+
   @Column({ nullable: true })
-  altText: string;
-
-  @ManyToOne(() => Project, (project) => project.media, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'projectId' })
-  project: Project;
+  bannerId?: string;
 
   @Column({ default: 0 })
   displayOrder: number;
@@ -50,9 +72,9 @@ export class Media {
   updatedAt: Date;
 
   @ManyToOne(() => User, { nullable: true })
-  @JoinColumn({ name: 'createdBy' })
-  createdBy: User;
+  @JoinColumn({ name: 'createdById' })
+  createdBy?: User;
 
   @Column({ nullable: true })
-  createdById: string;
+  createdById?: string;
 }

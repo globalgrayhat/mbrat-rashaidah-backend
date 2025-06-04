@@ -1,49 +1,32 @@
-import {
-  IsString,
-  IsNotEmpty,
-  IsUrl,
-  IsOptional,
-  IsNumber,
-  IsBoolean,
-  IsUUID,
-} from 'class-validator';
-import { Type } from 'class-transformer'; // Needed for @Type()
+import { IsString, IsNumber, IsEnum, IsOptional, IsBoolean } from 'class-validator';
+import { MediaType } from '../entities/media.entity';
 
 export class CreateMediaDto {
   @IsString()
-  @IsNotEmpty()
-  title: string;
+  data: string;
 
   @IsString()
-  @IsNotEmpty()
-  type: string; // e.g., 'image', 'video', 'document'
+  mimeType: string;
 
-  @IsUrl() // Validates that the string is a URL
-  @IsNotEmpty()
-  url: string;
+  @IsNumber()
+  size: number;
 
-  @IsUrl()
-  @IsOptional() // Based on your entity nullable: true
-  thumbnailUrl?: string;
+  @IsEnum(MediaType)
+  type: MediaType;
 
   @IsString()
-  @IsOptional() // Based on your entity nullable: true
-  description?: string;
-
-  @IsString()
-  @IsOptional() // Based on your entity nullable: true
+  @IsOptional()
   altText?: string;
 
   @IsNumber()
-  @IsOptional() // Based on your entity default: 0
-  @Type(() => Number) // Ensure value is number
+  @IsOptional()
   displayOrder?: number;
 
   @IsBoolean()
-  @IsOptional() // Based on your entity default: true
+  @IsOptional()
   isActive?: boolean;
 
-  @IsUUID()
-  @IsOptional() // Based on your entity nullable: true
-  createdById?: string; // Assuming user ID is UUID and nullable
-}
+  @IsString()
+  @IsOptional()
+  createdById?: string;
+} 

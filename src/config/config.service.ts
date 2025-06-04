@@ -10,29 +10,33 @@ export class AppConfigService {
 
   /** ==================== Database Configuration ==================== */
 
-  /** PostgreSQL host */
-  get postgresHost(): string {
-    return this.configService.get<string>('POSTGRES_HOST') || '';
+  /** host */
+  get type(): string {
+    return this.configService.get<string>('TYPE') || '';
+  }
+  /** host */
+  get host(): string {
+    return this.configService.get<string>('HOST') || '';
   }
 
-  /** PostgreSQL port */
-  get postgresPort(): number {
-    return this.configService.get<number>('POSTGRES_PORT') || 5432;
+  /** port */
+  get port(): number {
+    return this.configService.get<number>('PORT_DATABASE') || 5432;
   }
 
-  /** PostgreSQL username */
-  get postgresUser(): string {
-    return this.configService.get<string>('POSTGRES_USER') || '';
+  /** username */
+  get user(): string {
+    return this.configService.get<string>('USER') || '';
   }
 
-  /** PostgreSQL password */
-  get postgresPassword(): string {
-    return this.configService.get<string>('POSTGRES_PASSWORD') || '';
+  /** password */
+  get password(): string {
+    return this.configService.get<string>('PASSWORD') || '';
   }
 
-  /** PostgreSQL database name */
-  get postgresDatabase(): string {
-    return this.configService.get<string>('POSTGRES_DB') || '';
+  /** database name */
+  get database(): string {
+    return this.configService.get<string>('DB') || '';
   }
 
   /** ==================== JWT Configuration ==================== */

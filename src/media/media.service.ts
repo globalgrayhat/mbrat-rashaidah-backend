@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media } from './entities/media.entity';
@@ -9,27 +9,43 @@ import { UpdateMediaDto } from './dto/update-media.dto';
 export class MediaService {
   constructor(
     @InjectRepository(Media)
-    private mediaRepository: Repository<Media>,
+    private readonly mediaRepository: Repository<Media>,
   ) {}
 
-  create(createMediaDto: CreateMediaDto) {
-    const media = this.mediaRepository.create(createMediaDto);
-    return this.mediaRepository.save(media);
+  async create(createMediaDto: CreateMediaDto): Promise<Media> {
+    const media = this.mediaRepository.create({
+      ...createMediaDto,
+      isActive: createMediaDto.isActive ?? true,
+      displayOrder: createMediaDto.displayOrder ?? 0,
+    });
+    return await this.mediaRepository.save(media);
   }
 
-  findAll() {
-    return this.mediaRepository.find();
+  async findAll(): Promise<Media[]> {
+    return await this.mediaRepository.find({
+      order: {
+        displayOrder: 'ASC',
+        createdAt: 'DESC',
+      },
+    });
   }
 
-  findOne(id: string) {
-    return this.mediaRepository.findOne({ where: { id } });
+  async findOne(id: string): Promise<Media> {
+    const media = await this.mediaRepository.findOne({ where: { id } });
+    if (!media) {
+      throw new NotFoundException(`Media with ID ${id} not found`);
+    }
+    return media;
   }
 
-  update(id: string, updateMediaDto: UpdateMediaDto) {
-    return this.mediaRepository.update(id, updateMediaDto);
+  async update(id: string, updateMediaDto: UpdateMediaDto): Promise<Media> {
+    const media = await this.findOne(id);
+    Object.assign(media, updateMediaDto);
+    return await this.mediaRepository.save(media);
   }
 
-  remove(id: string) {
-    return this.mediaRepository.delete(id);
+  async remove(id: string): Promise<void> {
+    const media = await this.findOne(id);
+    await this.mediaRepository.remove(media);
   }
-}
+} 

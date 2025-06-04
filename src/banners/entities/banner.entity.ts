@@ -7,7 +7,9 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+
 import { User } from '../../user/entities/user.entity';
+import { Media } from '../../media/entities/media.entity';
 
 @Entity('banners')
 export class Banner {
@@ -18,13 +20,17 @@ export class Banner {
   title: string;
 
   @Column({ type: 'text', nullable: true })
-  description: string;
+  description?: string;
 
-  @Column({ length: 255 })
-  imageUrl: string;
+  @ManyToOne(() => Media, { nullable: true })
+  @JoinColumn({ name: 'mediaId' })
+  media?: Media;
+
+  @Column({ nullable: true })
+  mediaId?: string;
 
   @Column({ length: 255, nullable: true })
-  linkUrl: string;
+  linkUrl?: string;
 
   @Column({ default: true })
   isActive: boolean;
@@ -39,9 +45,9 @@ export class Banner {
   updatedAt: Date;
 
   @ManyToOne(() => User, { nullable: true })
-  @JoinColumn({ name: 'createdBy' })
-  createdBy: User;
+  @JoinColumn({ name: 'createdById' })
+  createdBy?: User;
 
   @Column({ nullable: true })
-  createdById: string;
+  createdById?: string;
 }

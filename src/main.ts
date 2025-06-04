@@ -12,6 +12,7 @@ async function bootstrap() {
 
   // Security middleware
   app.use(helmet()); // This should now be callable
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   app.use(compression());
 
   // Global validation pipe
@@ -24,7 +25,7 @@ async function bootstrap() {
   );
   // Global traffic interceptor
   app.useGlobalInterceptors(app.get(TrafficInterceptor));
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.APP_PORT ?? 3000);
 }
 bootstrap();
 //

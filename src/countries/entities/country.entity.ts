@@ -12,7 +12,6 @@ import {
 // Ensure correct paths for these imports based on your project structure
 import { Project } from '../../projects/entities/project.entity';
 import { Continent } from '../../continents/entities/continent.entity';
-import { SacrificePrice } from '../../sacrifices/sacrifices-prices/entities/sacrifice-price.entity';
 
 @Entity('countries')
 export class Country {
@@ -55,7 +54,4 @@ export class Country {
 
   @UpdateDateColumn()
   updatedAt: Date;
-
-  @OneToMany(() => SacrificePrice, (sacrificePrice) => sacrificePrice.country)
-  sacrificePrices: SacrificePrice[];
 }

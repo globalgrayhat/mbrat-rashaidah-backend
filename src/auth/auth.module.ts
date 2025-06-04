@@ -4,13 +4,13 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { JwtStrategy } from './strategies/jwt.strategy';
+import { JwtStrategy } from '../common/strategies/jwt.strategy';
 import { UserModule } from '../user/user.module';
 import { AppConfigModule } from '../config/config.module';
 import { OtpModule } from '../common/otp/otp.module';
 import { OtpService } from '../common/otp/otp.service';
 import { MailModule } from '../common/mail/mail.module';
-import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
+import { RefreshTokenStrategy } from '../common/strategies/refresh-token.strategy';
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
