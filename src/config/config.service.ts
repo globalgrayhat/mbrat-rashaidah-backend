@@ -8,6 +8,23 @@ import { ConfigService } from '@nestjs/config';
 export class AppConfigService {
   constructor(private configService: ConfigService) {}
 
+  /** ==================== Environment ==================== */
+
+  /** Check if running in development environment */
+  get isDevelopment(): boolean {
+    return this.configService.get<string>('NODE_ENV') === 'development';
+  }
+
+  /** Check if running in testing environment */
+  get isTest(): boolean {
+    return this.configService.get<string>('NODE_ENV') === 'test';
+  }
+
+  /** Check if running in production environment */
+  get isProduction(): boolean {
+    return this.configService.get<string>('NODE_ENV') === 'production';
+  }
+
   /** ==================== Database Configuration ==================== */
 
   /** host */
@@ -67,6 +84,7 @@ export class AppConfigService {
   get otpEnabled(): boolean {
     return this.configService.get<string>('OTP_ENABLED', 'false') === 'true';
   }
+
   /** Set time to OTP */
   get otpExpiresIn(): number {
     return this.configService.get<number>('EXP_MINUTES', 1);

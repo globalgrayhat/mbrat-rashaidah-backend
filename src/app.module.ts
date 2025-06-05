@@ -29,27 +29,31 @@ import { DonationsModule } from './donations/donations.module';
 import { MyFatooraModule } from './myfatoora/myfatoora.module';
 import { StripeModule } from './stripe/stripe.module';
 
-
 @Module({
   imports: [
     AppConfigModule,
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
-      useFactory: (config) => ({
+      useFactory: (config: AppConfigService) => ({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        type: config.type,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        type: config.type as any,
         host: config.host,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         port: config.port,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         username: config.user,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         password: config.password,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         database: config.database,
-        entities: [User, Banner, Project, Category, Media, Country, Continent, Campaign, Donation],
-        synchronize: true,
+        entities: [
+          User,
+          Banner,
+          Project,
+          Category,
+          Media,
+          Country,
+          Continent,
+          Campaign,
+          Donation,
+        ],
+        synchronize: config.isDevelopment,
       }),
       inject: [AppConfigService],
     }),

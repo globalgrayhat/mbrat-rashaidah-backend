@@ -94,7 +94,8 @@ npm i
 3. Create a `.env` file in the root directory with the following variables:
 
 ```env
-# App Port
+# Environment
+NODE_ENV=development
 APP=3000
 # Database
 TYPE=postgres
@@ -105,10 +106,10 @@ PASSWORD=root
 DB=mbrat-rashaidah
 # JWT Access Token
 JWT_ACCESS_SECRET=your_supabase_jwt_secret
-JWT_EXPIRATION=1h
-# JWT Access Token
+JWT_EXPIRATION=30m
+# JWT Refresh Token
 JWT_REFRESH_SECRET=my_refresh_token_secret_456
-JWT_REFRESH_EXPIRATION=1d
+JWT_REFRESH_EXPIRATION=2h
 # OTP
 OTP_ENABLED=false
 EXP_MINUTES=2
@@ -117,7 +118,7 @@ MAIL_HOST=smtp.gmail.com
 MAIL_PORT=465
 MAIL_SECURE=SSL
 MAIL_USER=studentofthecourse@gmail.com
-MAIL_PASS=jadsbajbdadasd
+MAIL_PASS=sfgsgsfgdgfg dfdsf
 MAIL_FROM=studentofthecourse@gmail.com
 MAIL_FROM_NAME=No‑Reply
 # Payment
