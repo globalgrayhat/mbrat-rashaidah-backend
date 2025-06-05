@@ -1,7 +1,10 @@
-// [FIXED 2025-06-04]
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, QueryFailedError } from 'typeorm';
 import { Project } from './entities/project.entity';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -27,55 +30,99 @@ export class ProjectsService {
   ) {}
 
   async create(createProjectDto: CreateProjectDto): Promise<Project> {
-    const { categoryId, countryId, continentId, mediaIds = [] } = createProjectDto;
+    const {
+      title,
+      slug,
+      categoryId,
+      countryId,
+      continentId,
+      mediaIds = [],
+      // other fields (description, location, startDate, etc.) get spread in below
+    } = createProjectDto;
 
-    // Verify category exists
+    // 1) Check slug uniqueness up-front
+    const existingBySlug = await this.projectRepository.findOne({
+      where: { slug },
+    });
+    if (existingBySlug) {
+      // you could choose 409 Conflict or 400 Bad Request
+      throw new ConflictException(`Slug "${slug}" is already in use.`);
+    }
+
+    // 2) Verify Category exists
     const category = await this.categoryRepository.findOne({
       where: { id: categoryId },
     });
     if (!category) {
-      throw new NotFoundException(`Category with ID ${categoryId} not found`);
+      throw new NotFoundException(
+        `Category with ID "${categoryId}" not found.`,
+      );
     }
 
-    // Verify country exists
+    // 3) Verify Country exists
     const country = await this.countryRepository.findOne({
       where: { id: countryId },
     });
     if (!country) {
-      throw new NotFoundException(`Country with ID ${countryId} not found`);
+      throw new NotFoundException(`Country with ID "${countryId}" not found.`);
     }
 
-    // Verify continent exists
+    // 4) Verify Continent exists
     const continent = await this.continentRepository.findOne({
       where: { id: continentId },
     });
     if (!continent) {
-      throw new NotFoundException(`Continent with ID ${continentId} not found`);
+      throw new NotFoundException(
+        `Continent with ID "${continentId}" not found.`,
+      );
     }
 
-    // Create project
+    // 5) Prepare the Project entity
     const project = this.projectRepository.create({
-      ...createProjectDto,
+      title,
+      slug,
+      description: createProjectDto.description,
+      location: createProjectDto.location,
+      startDate: createProjectDto.startDate,
+      endDate: createProjectDto.endDate,
+      targetAmount: createProjectDto.targetAmount,
       categoryId,
       countryId,
       continentId,
       status: ProjectStatus.DRAFT,
+      isActive: createProjectDto.isActive ?? true,
+      isDonationActive: createProjectDto.isDonationActive ?? false,
+      isProgressActive: createProjectDto.isProgressActive ?? false,
+      isTargetAmountActive: createProjectDto.isTargetAmountActive ?? false,
+      donationGoal: createProjectDto.donationGoal,
+      // viewCount, currentAmount, donationCount, createdById, etc. remain default/null
     });
 
-    // Attach media if provided
+    // 6) Attach media if provided
     if (mediaIds.length > 0) {
       const medias = await this.mediaRepository.findByIds(mediaIds);
       if (medias.length !== mediaIds.length) {
-        throw new NotFoundException('One or more media items not found');
+        throw new NotFoundException(`One or more media items not found.`);
       }
       project.media = medias;
     }
 
-    return this.projectRepository.save(project);
+    // 7) Save & catch any unexpected uniqueness violation at the DB layer
+    try {
+      return await this.projectRepository.save(project);
+    } catch (err) {
+      // In case a race condition allowed a duplicate-slug slip through
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      if (err instanceof QueryFailedError && (err as any).code === '23505') {
+        throw new ConflictException(`Project slug "${slug}" already exists.`);
+      }
+      // Bubble up any other error
+      throw err;
+    }
   }
 
   async findAll(): Promise<Project[]> {
-    return await this.projectRepository.find({
+    return this.projectRepository.find({
       relations: ['category', 'country', 'continent', 'media'],
       order: {
         createdAt: 'DESC',
@@ -89,49 +136,118 @@ export class ProjectsService {
       relations: ['category', 'country', 'continent', 'media'],
     });
     if (!project) {
-      throw new NotFoundException(`Project with ID ${id} not found`);
+      throw new NotFoundException(`Project with ID "${id}" not found.`);
     }
     return project;
   }
 
-  async update(id: string, updateProjectDto: UpdateProjectDto): Promise<Project> {
+  async update(
+    id: string,
+    updateProjectDto: UpdateProjectDto,
+  ): Promise<Project> {
+    // 1) Load existing, or 404
     const project = await this.findOne(id);
+
+    // 2) If incoming DTO has a slug change, check uniqueness
+    if (updateProjectDto.slug && updateProjectDto.slug !== project.slug) {
+      const duplicate = await this.projectRepository.findOne({
+        where: { slug: updateProjectDto.slug },
+      });
+      if (duplicate) {
+        throw new ConflictException(
+          `Slug "${updateProjectDto.slug}" is already in use.`,
+        );
+      }
+    }
+
+    // 3) If they’re updating categoryId/countryId/continentId, verify those too
+    if (updateProjectDto.categoryId) {
+      const category = await this.categoryRepository.findOne({
+        where: { id: updateProjectDto.categoryId },
+      });
+      if (!category) {
+        throw new NotFoundException(
+          `Category with ID "${updateProjectDto.categoryId}" not found.`,
+        );
+      }
+    }
+    if (updateProjectDto.countryId) {
+      const country = await this.countryRepository.findOne({
+        where: { id: updateProjectDto.countryId },
+      });
+      if (!country) {
+        throw new NotFoundException(
+          `Country with ID "${updateProjectDto.countryId}" not found.`,
+        );
+      }
+    }
+    if (updateProjectDto.continentId) {
+      const continent = await this.continentRepository.findOne({
+        where: { id: updateProjectDto.continentId },
+      });
+      if (!continent) {
+        throw new NotFoundException(
+          `Continent with ID "${updateProjectDto.continentId}" not found.`,
+        );
+      }
+    }
+
+    // 4) Merge DTO into entity and re-attach media if needed
     Object.assign(project, updateProjectDto);
-    return await this.projectRepository.save(project);
+
+    if (updateProjectDto.mediaIds) {
+      const medias = await this.mediaRepository.findByIds(
+        updateProjectDto.mediaIds,
+      );
+      if (medias.length !== updateProjectDto.mediaIds.length) {
+        throw new NotFoundException(`One or more media items not found.`);
+      }
+      project.media = medias;
+    }
+
+    // 5) Finally save the updated project
+    try {
+      return await this.projectRepository.save(project);
+    } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      if (err instanceof QueryFailedError && (err as any).code === '23505') {
+        throw new ConflictException(
+          `Project slug "${updateProjectDto.slug}" already exists.`,
+        );
+      }
+      throw err;
+    }
   }
 
   async remove(id: string): Promise<void> {
     const result = await this.projectRepository.delete(id);
     if (result.affected === 0) {
-      throw new NotFoundException(`Project with ID ${id} not found`);
+      throw new NotFoundException(`Project with ID "${id}" not found.`);
     }
   }
 
   async findByCategory(categoryId: string): Promise<Project[]> {
-    const projects = await this.projectRepository.find({
+    return this.projectRepository.find({
       where: { categoryId },
       relations: ['category', 'country', 'continent', 'media'],
       order: { createdAt: 'DESC' },
     });
-    return projects;
   }
 
   async findByCountry(countryId: string): Promise<Project[]> {
-    const projects = await this.projectRepository.find({
+    return this.projectRepository.find({
       where: { countryId },
       relations: ['category', 'country', 'continent', 'media'],
       order: { createdAt: 'DESC' },
     });
-    return projects;
   }
 
   async findProjectList(status: ProjectStatus): Promise<Project[]> {
-    const projects = await this.projectRepository.find({
+    return this.projectRepository.find({
       where: { status },
       relations: ['category', 'country', 'continent', 'media'],
       order: { createdAt: 'DESC' },
     });
-    return projects;
   }
 
   async findProjectDetails(projectId: string): Promise<Project> {
@@ -140,7 +256,7 @@ export class ProjectsService {
       relations: ['category', 'country', 'continent', 'media'],
     });
     if (!project) {
-      throw new NotFoundException(`Project with ID ${projectId} not found`);
+      throw new NotFoundException(`Project with ID "${projectId}" not found.`);
     }
     return project;
   }
@@ -156,13 +272,13 @@ export class ProjectsService {
       this.projectRepository.count({ where: { isActive: true } }),
       this.projectRepository
         .createQueryBuilder('project')
-        .select('project.categoryId')
+        .select('project.categoryId', 'categoryId')
         .addSelect('COUNT(*)', 'count')
         .groupBy('project.categoryId')
         .getRawMany(),
       this.projectRepository
         .createQueryBuilder('project')
-        .select('project.countryId')
+        .select('project.countryId', 'countryId')
         .addSelect('COUNT(*)', 'count')
         .groupBy('project.countryId')
         .getRawMany(),
@@ -171,7 +287,9 @@ export class ProjectsService {
     return {
       total,
       active,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       byCategory,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       byCountry,
     };
   }
