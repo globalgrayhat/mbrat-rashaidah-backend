@@ -4,6 +4,7 @@ import { Banner } from '../../banners/entities/banner.entity';
 import { MediaType } from '../../common/constants/media.constant';
 export declare class Media {
     id: string;
+    name: string;
     data: string;
     mimeType: string;
     size: number;

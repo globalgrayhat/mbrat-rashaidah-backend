@@ -73,7 +73,7 @@ export class Project {
   /**
    * Current amount raised
    */
-  @Column('decimal', { precision: 10, scale: 2, default: 0 })
+  @Column('decimal', { precision: 10, scale: 2 })
   currentAmount: number;
 
   /**

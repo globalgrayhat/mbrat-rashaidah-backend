@@ -26,6 +26,12 @@ export class Media {
   id: string;
 
   /**
+   * Display name of the media
+   */
+  @Column({ length: 255 })
+  name: string;
+
+  /**
    * Base64-encoded file data
    */
   @Column('longtext')

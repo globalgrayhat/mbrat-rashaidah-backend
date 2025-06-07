@@ -65,6 +65,7 @@ export class MediaController {
 
     // Create media DTO
     const createMediaDto: CreateMediaDto = {
+      name: file.originalname,
       data: base64Data,
       mimeType: file.mimetype,
       size: file.size,

@@ -4,10 +4,15 @@ import {
   IsEnum,
   IsOptional,
   IsBoolean,
+  IsNotEmpty,
 } from 'class-validator';
 import { MediaType } from '../../common/constants/media.constant';
 
 export class CreateMediaDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
   @IsString()
   data: string;
 

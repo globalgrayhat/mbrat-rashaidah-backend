@@ -53,6 +53,11 @@ export class CreateProjectDto {
   @Min(0)
   targetAmount: number;
 
+  // amount
+  @IsNumber()
+  @Min(0)
+  currentAmount: number;
+
   // FK to Category
   @IsUUID()
   @IsNotEmpty()

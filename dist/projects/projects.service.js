@@ -69,6 +69,7 @@ let ProjectsService = class ProjectsService {
             startDate: createProjectDto.startDate,
             endDate: createProjectDto.endDate,
             targetAmount: createProjectDto.targetAmount,
+            currentAmount: createProjectDto.currentAmount,
             categoryId,
             countryId,
             continentId,

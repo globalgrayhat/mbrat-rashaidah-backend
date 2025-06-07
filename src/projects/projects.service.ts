@@ -86,6 +86,7 @@ export class ProjectsService {
       startDate: createProjectDto.startDate,
       endDate: createProjectDto.endDate,
       targetAmount: createProjectDto.targetAmount,
+      currentAmount: createProjectDto.currentAmount,
       categoryId,
       countryId,
       continentId,
@@ -95,7 +96,7 @@ export class ProjectsService {
       isProgressActive: createProjectDto.isProgressActive ?? false,
       isTargetAmountActive: createProjectDto.isTargetAmountActive ?? false,
       donationGoal: createProjectDto.donationGoal,
-      // viewCount, currentAmount, donationCount, createdById, etc. remain default/null
+      // viewCount, donationCount, createdById, etc. remain default/null
     });
 
     // 6) Attach media if provided

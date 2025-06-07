@@ -13,6 +13,7 @@ exports.CreateMediaDto = void 0;
 const class_validator_1 = require("class-validator");
 const media_constant_1 = require("../../common/constants/media.constant");
 class CreateMediaDto {
+    name;
     data;
     mimeType;
     size;
@@ -23,6 +24,11 @@ class CreateMediaDto {
     createdById;
 }
 exports.CreateMediaDto = CreateMediaDto;
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateMediaDto.prototype, "name", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)

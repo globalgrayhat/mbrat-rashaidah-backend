@@ -20,6 +20,7 @@ class CreateProjectDto {
     startDate;
     endDate;
     targetAmount;
+    currentAmount;
     categoryId;
     countryId;
     continentId;
@@ -68,6 +69,11 @@ __decorate([
     (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
 ], CreateProjectDto.prototype, "targetAmount", void 0);
+__decorate([
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Number)
+], CreateProjectDto.prototype, "currentAmount", void 0);
 __decorate([
     (0, class_validator_1.IsUUID)(),
     (0, class_validator_1.IsNotEmpty)(),

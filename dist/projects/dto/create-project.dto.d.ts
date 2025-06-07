@@ -6,6 +6,7 @@ export declare class CreateProjectDto {
     startDate: Date;
     endDate?: Date;
     targetAmount: number;
+    currentAmount: number;
     categoryId: string;
     countryId: string;
     continentId: string;

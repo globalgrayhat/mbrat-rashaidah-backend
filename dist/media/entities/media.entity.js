@@ -17,6 +17,7 @@ const banner_entity_1 = require("../../banners/entities/banner.entity");
 const media_constant_1 = require("../../common/constants/media.constant");
 let Media = class Media {
     id;
+    name;
     data;
     mimeType;
     size;
@@ -37,6 +38,10 @@ __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
     __metadata("design:type", String)
 ], Media.prototype, "id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ length: 255 }),
+    __metadata("design:type", String)
+], Media.prototype, "name", void 0);
 __decorate([
     (0, typeorm_1.Column)('longtext'),
     __metadata("design:type", String)

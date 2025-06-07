@@ -34,6 +34,7 @@ let MediaController = class MediaController {
         }
         const base64Data = file.buffer.toString('base64');
         const createMediaDto = {
+            name: file.originalname,
             data: base64Data,
             mimeType: file.mimetype,
             size: file.size,
