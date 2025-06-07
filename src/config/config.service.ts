@@ -80,11 +80,11 @@ export class AppConfigService {
 
   /** host */
   get typeDatabase(): string {
-    return this.configService.get<string>('TYPE') || '';
+    return this.configService.get<string>('TYPE_DATABASE') || '';
   }
   /** host */
   get hostDatabase(): string {
-    return this.configService.get<string>('HOST') || '';
+    return this.configService.get<string>('HOST_DATABASE') || '';
   }
 
   /** port */
@@ -94,17 +94,17 @@ export class AppConfigService {
 
   /** username */
   get userDatabase(): string {
-    return this.configService.get<string>('USER') || '';
+    return this.configService.get<string>('USER_DATABASE') || '';
   }
 
   /** password */
   get passwordDatabase(): string {
-    return this.configService.get<string>('PASSWORD') || '';
+    return this.configService.get<string>('PASSWORD_DATABASE') || '';
   }
 
   /** database name */
   get nameDatabase(): string {
-    return this.configService.get<string>('DB') || '';
+    return this.configService.get<string>('NAME_DATABASE') || '';
   }
 
   /** ==================== JWT Configuration ==================== */

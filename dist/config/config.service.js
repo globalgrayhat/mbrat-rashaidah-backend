@@ -54,22 +54,22 @@ let AppConfigService = class AppConfigService {
         return this.configService.get('NODE_ENV') === 'production';
     }
     get typeDatabase() {
-        return this.configService.get('TYPE') || '';
+        return this.configService.get('TYPE_DATABASE') || '';
     }
     get hostDatabase() {
-        return this.configService.get('HOST') || '';
+        return this.configService.get('HOST_DATABASE') || '';
     }
     get portDatabase() {
         return this.configService.get('PORT_DATABASE') || 3306;
     }
     get userDatabase() {
-        return this.configService.get('USER') || '';
+        return this.configService.get('USER_DATABASE') || '';
     }
     get passwordDatabase() {
-        return this.configService.get('PASSWORD') || '';
+        return this.configService.get('PASSWORD_DATABASE') || '';
     }
     get nameDatabase() {
-        return this.configService.get('DB') || '';
+        return this.configService.get('NAME_DATABASE') || '';
     }
     get jwtAccessTokenSecret() {
         return this.configService.get('JWT_ACCESS_SECRET') || '';

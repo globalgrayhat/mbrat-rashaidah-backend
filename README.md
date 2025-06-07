@@ -103,12 +103,12 @@ API_DOMAIN=localhost
 # Environment
 NODE_ENV=development
 # Database
-TYPE=mysql
-HOST=localhost
+TYPE_DATABASE=mysql
+HOST_DATABASE=localhost
 PORT_DATABASE=3306
-USER=root
-PASSWORD=
-DB=mbrat_rashaidah
+USER_DATABASE=root
+PASSWORD_DATABASE=
+NAME_DATABASE=mbrat_rashaidah
 # JWT Access Token
 JWT_ACCESS_SECRET=your_supabase_jwt_secret
 JWT_EXPIRATION=30m
