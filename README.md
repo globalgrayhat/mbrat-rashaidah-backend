@@ -103,12 +103,12 @@ API_DOMAIN=localhost
 # Environment
 NODE_ENV=development
 # Database
-TYPE=postgres
+TYPE=mysql
 HOST=localhost
-PORT_DATABASE=5432
-USER=postgres
-PASSWORD=root
-DB=mbrat-rashaidah
+PORT_DATABASE=3306
+USER=root
+PASSWORD=
+DB=mbrat_rashaidah
 # JWT Access Token
 JWT_ACCESS_SECRET=your_supabase_jwt_secret
 JWT_EXPIRATION=30m
@@ -118,12 +118,13 @@ JWT_REFRESH_EXPIRATION=2h
 # OTP
 OTP_ENABLED=false
 EXP_MINUTES=2
+OTP_LENGTH=6
 # Mail
 MAIL_HOST=smtp.gmail.com
 MAIL_PORT=465
 MAIL_SECURE=SSL
 MAIL_USER=studentofthecourse@gmail.com
-MAIL_PASS=gdgdgfddvfsvsdfvdddddddddd
+MAIL_PASS=sdfsfssfgfssvsavvrv
 MAIL_FROM=studentofthecourse@gmail.com
 MAIL_FROM_NAME=No‑Reply
 # Payment
