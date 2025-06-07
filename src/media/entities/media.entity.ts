@@ -14,21 +14,38 @@ import { Project } from '../../projects/entities/project.entity';
 import { Banner } from '../../banners/entities/banner.entity';
 import { MediaType } from '../../common/constants/media.constant';
 
-
+/**
+ * Represents a media asset stored in the system
+ */
 @Entity('media')
 export class Media {
+  /**
+   * Primary key: UUID generated automatically
+   */
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column('text')
-  data: string; // Base64 encoded file data
+  /**
+   * Base64-encoded file data
+   */
+  @Column('longtext')
+  data: string;
 
+  /**
+   * MIME type of the media (e.g., image/png)
+   */
   @Column({ length: 100 })
   mimeType: string;
 
-  @Column()
+  /**
+   * Size of the file in bytes
+   */
+  @Column('int')
   size: number;
 
+  /**
+   * Type of media (image, video, etc.)
+   */
   @Column({
     type: 'enum',
     enum: MediaType,
@@ -36,12 +53,21 @@ export class Media {
   })
   type: MediaType;
 
-  @Column({ nullable: true })
+  /**
+   * Alternative text for accessibility
+   */
+  @Column({ length: 255, nullable: true })
   altText?: string;
 
+  /**
+   * Projects associated with this media
+   */
   @ManyToMany(() => Project, (project) => project.media)
   projects: Project[];
 
+  /**
+   * Banner associated with this media (optional)
+   */
   @ManyToOne(() => Banner, (banner) => banner.media, {
     nullable: true,
     onDelete: 'CASCADE',
@@ -49,25 +75,46 @@ export class Media {
   @JoinColumn({ name: 'bannerId' })
   banner?: Banner;
 
-  @Column({ nullable: true })
+  /**
+   * Foreign key for banner
+   */
+  @Column('uuid', { nullable: true })
   bannerId?: string;
 
-  @Column({ default: 0 })
+  /**
+   * Order for display in lists or galleries
+   */
+  @Column({ type: 'int', default: 0 })
   displayOrder: number;
 
+  /**
+   * Flag indicating if the media is active
+   */
   @Column({ default: true })
   isActive: boolean;
 
-  @CreateDateColumn()
+  /**
+   * Timestamp when the media record was created
+   */
+  @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  /**
+   * Timestamp when the media record was last updated
+   */
+  @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 
+  /**
+   * User who uploaded the media (optional)
+   */
   @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'createdById' })
   createdBy?: User;
 
-  @Column({ nullable: true })
+  /**
+   * Foreign key for creator user
+   */
+  @Column('uuid', { nullable: true })
   createdById?: string;
 }

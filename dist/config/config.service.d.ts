@@ -1,0 +1,33 @@
+import { ConfigService } from '@nestjs/config';
+export declare class AppConfigService {
+    private configService;
+    constructor(configService: ConfigService);
+    get appName(): string;
+    get port(): number;
+    get baseDomain(): string;
+    get apiDomain(): string;
+    get allowedOrigins(): string[];
+    get isDevelopment(): boolean;
+    get isTest(): boolean;
+    get isProduction(): boolean;
+    get typeDatabase(): string;
+    get hostDatabase(): string;
+    get portDatabase(): number;
+    get userDatabase(): string;
+    get passwordDatabase(): string;
+    get nameDatabase(): string;
+    get jwtAccessTokenSecret(): string;
+    get jwtAccessTokenExpiresIn(): string;
+    get jwtRefreshTokenSecret(): string;
+    get jwtRefreshTokenExpiresIn(): string;
+    get otpEnabled(): boolean;
+    get otpExpiresIn(): number;
+    get otpLength(): number;
+    get mailHost(): string;
+    get mailPort(): number;
+    get mailSecure(): string;
+    get mailUser(): string;
+    get mailPass(): string;
+    get mailFrom(): string;
+    get mailFromName(): string;
+}

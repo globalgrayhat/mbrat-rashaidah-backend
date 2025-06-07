@@ -8,35 +8,103 @@ import { ConfigService } from '@nestjs/config';
 export class AppConfigService {
   constructor(private configService: ConfigService) {}
 
+  /** ==================== App Config ==================== */
+
+  /** Application name */
+  get appName(): string {
+    return this.configService.get<string>('APP_NAME') ?? 'GlobalGrayHat';
+  }
+
+  /** Application port */
+  get port(): number {
+    return Number(this.configService.get<string>('PORT') ?? 3000);
+  }
+
+  /** The main domain (e.g. example.com) */
+  get baseDomain(): string {
+    return this.configService.get<string>('BASE_DOMAIN') ?? 'localhost';
+  }
+
+  /** The subdomain used for API (e.g. api.example.com) */
+  get apiDomain(): string {
+    return (
+      this.configService.get<string>('API_DOMAIN') ?? `api.${this.baseDomain}`
+    );
+  }
+
+  /** Allowed CORS origins (comma separated) */
+  get allowedOrigins(): string[] {
+    // Get raw origins string from environment
+    const rawOrigins = this.configService.get<string>('ALLOWED_ORIGINS');
+
+    // Split and trim the origins if defined, otherwise start with an empty array
+    const origins = rawOrigins
+      ? rawOrigins.split(',').map((origin) => origin.trim())
+      : [];
+
+    // Compose default domains
+    const base = `https://${this.baseDomain}`;
+    const api = `https://${this.apiDomain}`;
+
+    // Add base domain if it's not already included
+    if (!origins.includes(base)) {
+      origins.push(base);
+    }
+
+    // Add API domain if it's not already included
+    if (!origins.includes(api)) {
+      origins.push(api);
+    }
+
+    return origins;
+  }
+
+  /** ==================== Environment ==================== */
+
+  /** Check if running in development environment */
+  get isDevelopment(): boolean {
+    return this.configService.get<string>('NODE_ENV') === 'development';
+  }
+
+  /** Check if running in testing environment */
+  get isTest(): boolean {
+    return this.configService.get<string>('NODE_ENV') === 'test';
+  }
+
+  /** Check if running in production environment */
+  get isProduction(): boolean {
+    return this.configService.get<string>('NODE_ENV') === 'production';
+  }
+
   /** ==================== Database Configuration ==================== */
 
   /** host */
-  get type(): string {
-    return this.configService.get<string>('TYPE') || '';
+  get typeDatabase(): string {
+    return this.configService.get<string>('TYPE_DATABASE') || '';
   }
   /** host */
-  get host(): string {
-    return this.configService.get<string>('HOST') || '';
+  get hostDatabase(): string {
+    return this.configService.get<string>('HOST_DATABASE') || '';
   }
 
   /** port */
-  get port(): number {
-    return this.configService.get<number>('PORT_DATABASE') || 5432;
+  get portDatabase(): number {
+    return this.configService.get<number>('PORT_DATABASE') || 3306;
   }
 
   /** username */
-  get user(): string {
-    return this.configService.get<string>('USER') || '';
+  get userDatabase(): string {
+    return this.configService.get<string>('USER_DATABASE') || '';
   }
 
   /** password */
-  get password(): string {
-    return this.configService.get<string>('PASSWORD') || '';
+  get passwordDatabase(): string {
+    return this.configService.get<string>('PASSWORD_DATABASE') || '';
   }
 
   /** database name */
-  get database(): string {
-    return this.configService.get<string>('DB') || '';
+  get nameDatabase(): string {
+    return this.configService.get<string>('NAME_DATABASE') || '';
   }
 
   /** ==================== JWT Configuration ==================== */
@@ -67,9 +135,14 @@ export class AppConfigService {
   get otpEnabled(): boolean {
     return this.configService.get<string>('OTP_ENABLED', 'false') === 'true';
   }
+
   /** Set time to OTP */
   get otpExpiresIn(): number {
     return this.configService.get<number>('EXP_MINUTES', 1);
+  }
+  /** Set length to OTP */
+  get otpLength(): number {
+    return this.configService.get<number>('OTP_LENGTH', 6);
   }
 
   /** ==================== Mail Server Configuration ==================== */

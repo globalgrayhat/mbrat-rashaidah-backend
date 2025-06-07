@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppConfigModule } from './config/config.module';
 import { AppConfigService } from './config/config.service';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { AdminModule } from './admin/admin.module';
@@ -29,27 +31,31 @@ import { DonationsModule } from './donations/donations.module';
 import { MyFatooraModule } from './myfatoora/myfatoora.module';
 import { StripeModule } from './stripe/stripe.module';
 
-
 @Module({
   imports: [
     AppConfigModule,
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
-      useFactory: (config) => ({
+      useFactory: (config: AppConfigService) => ({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        type: config.type,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        host: config.host,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        port: config.port,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        username: config.user,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        password: config.password,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        database: config.database,
-        entities: [User, Banner, Project, Category, Media, Country, Continent, Campaign, Donation],
-        synchronize: true,
+        type: config.typeDatabase as any,
+        host: config.hostDatabase,
+        port: config.portDatabase,
+        username: config.userDatabase,
+        password: config.passwordDatabase,
+        database: config.nameDatabase,
+        entities: [
+          User,
+          Banner,
+          Project,
+          Category,
+          Media,
+          Country,
+          Continent,
+          Campaign,
+          Donation,
+        ],
+        synchronize: config.isDevelopment,
       }),
       inject: [AppConfigService],
     }),
@@ -67,6 +73,7 @@ import { StripeModule } from './stripe/stripe.module';
     MyFatooraModule,
     StripeModule,
   ],
-  providers: [TrafficInterceptor, CustomLogger, MonitoringService],
+  controllers: [AppController],
+  providers: [AppService, TrafficInterceptor, CustomLogger, MonitoringService],
 })
 export class AppModule {}

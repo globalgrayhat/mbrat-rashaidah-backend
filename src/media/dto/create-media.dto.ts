@@ -1,4 +1,10 @@
-import { IsString, IsNumber, IsEnum, IsOptional, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsEnum,
+  IsOptional,
+  IsBoolean,
+} from 'class-validator';
 import { MediaType } from '../../common/constants/media.constant';
 
 export class CreateMediaDto {
@@ -29,4 +35,4 @@ export class CreateMediaDto {
   @IsString()
   @IsOptional()
   createdById?: string;
-} 
+}

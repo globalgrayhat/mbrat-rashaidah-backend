@@ -1,203 +1,170 @@
-
 import {
+  Injectable,
   BadRequestException,
   ForbiddenException,
-  Injectable,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Donation } from '../donations/entities/donation.entity';
 import { Project } from '../projects/entities/project.entity';
-import { Stripe } from 'stripe';
+import Stripe from 'stripe';
 import {
   PaymentCreateInput,
   PaymentResult,
 } from '../common/interfaces/payment-service.interface';
 import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
 
+/**
+ * Service handling Stripe payment operations
+ * Based on Stripe Checkout Integration docs:
+ * https://stripe.com/docs/payments/checkout
+ */
 @Injectable()
 export class StripeService {
-  private stripe: Stripe;
+  private readonly stripe: Stripe;
 
   constructor(
-    private dataSource: DataSource,
+    private readonly config: ConfigService,
+    private readonly dataSource: DataSource,
     @InjectRepository(Donation)
-    private donationRepo: Repository<Donation>,
+    private readonly donationRepo: Repository<Donation>,
     @InjectRepository(Project)
-    private projectRepo: Repository<Project>,
-    private config: ConfigService,
+    private readonly projectRepo: Repository<Project>,
   ) {
-    const STRIPE_SECRET_KEY =
-      this.config.get<string>('STRIPE_SECRET_KEY') || '';
-
-    this.stripe = new Stripe(STRIPE_SECRET_KEY, {
-      apiVersion: '2025-05-28.basil',
-    });
+    const apiKey = this.config.get<string>('STRIPE_SECRET_KEY');
+    if (!apiKey) {
+      throw new Error('Stripe secret key not configured');
+    }
+    this.stripe = new Stripe(apiKey, { apiVersion: '2025-05-28.basil' });
   }
 
+  /**
+   * Create a Stripe Checkout session for a donation
+   * Reference: https://stripe.com/docs/payments/checkout
+   */
   async createPayment(input: PaymentCreateInput): Promise<PaymentResult> {
-    try {
-      const success_url = this.config.get<string>('STRIPE_SUCCESS_URL');
-      const cancel_url = this.config.get<string>('STRIPE_CANCEL_URL');
+    const successUrl = this.config.get<string>('STRIPE_SUCCESS_URL');
+    const cancelUrl = this.config.get<string>('STRIPE_CANCEL_URL');
+    if (!successUrl || !cancelUrl) {
+      throw new BadRequestException('Stripe URLs not configured');
+    }
 
-      if (!success_url || !cancel_url) {
-        throw new Error('Missing Stripe configuration');
-      }
-
-      const session = await this.stripe.checkout.sessions.create({
-        line_items: [
-          {
-            quantity: 1,
-            price_data: {
-              unit_amount: Math.round(input.amount * 100), // Convert to cents
-              currency: input.currency.toLowerCase(),
-              product_data: {
-                name: `Donation for ${input.projectTitle}`,
-              },
-            },
+    const session = await this.stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: input.currency.toLowerCase(),
+            unit_amount: Math.round(input.amount * 100),
+            product_data: { name: `Donation for ${input.projectTitle}` },
           },
-        ],
-        mode: 'payment',
-        success_url: `${success_url}/${input.donationId}`,
-        cancel_url: `${cancel_url}/${input.donationId}`,
-      });
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${successUrl}/${input.donationId}`,
+      cancel_url: `${cancelUrl}/${input.donationId}`,
+    });
 
-      return {
-        id: session.id,
-        url: session.url || '',
-        status: this.mapStripeStatus(session.status || 'pending'),
-      };
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new BadRequestException(
-          `Failed to create Stripe payment: ${error.message}`,
-        );
-      }
-      throw new BadRequestException('Failed to create Stripe payment');
-    }
+    return {
+      id: session.id,
+      url: session.url!,
+      status: this.mapStatus(session.status ?? 'unknown'),
+    };
   }
 
-  async constructEvent(payload: Buffer, sig: string | string[]) {
+  /**
+   * Construct and verify a Stripe webhook event
+   * Reference: https://stripe.com/docs/webhooks/signatures
+   */
+  constructEvent(payload: Buffer, signature: string): Stripe.Event {
+    const secret = this.config.get<string>('STRIPE_WEBHOOK_SECRET');
+    if (!secret) throw new BadRequestException('Missing Stripe webhook secret');
     try {
-      const STRIPE_WEBHOOK_SECRET = this.config.get<string>(
-        'STRIPE_WEBHOOK_SECRET',
-      );
-      if (!STRIPE_WEBHOOK_SECRET) {
-        throw new Error('Missing webhook secret');
-      }
-
-      const event = await Promise.resolve(
-        this.stripe.webhooks.constructEvent(
-          payload,
-          Array.isArray(sig) ? sig[0] : sig,
-          STRIPE_WEBHOOK_SECRET,
-        ),
-      );
-
-      return event;
-    } catch (err) {
-      throw new BadRequestException('Invalid webhook signature');
+      return this.stripe.webhooks.constructEvent(payload, signature, secret);
+    } catch {
+      throw new BadRequestException('Invalid Stripe webhook signature');
     }
   }
 
-  async handlePaymentSucceeded(paymentId: string) {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
+  /**
+   * Process a successful Stripe payment
+   */
+  async handlePaymentSucceeded(sessionId: string): Promise<void> {
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
     try {
       const donation = await this.donationRepo.findOne({
-        where: { paymentId },
+        where: { paymentId: sessionId },
         relations: ['project'],
       });
+      if (!donation) throw new BadRequestException('Donation not found');
 
-      if (!donation) {
-        throw new BadRequestException('Payment not found');
-      }
-
-      // Update donation status
       donation.status = DonationStatusEnum.COMPLETED;
       donation.paidAt = new Date();
-      await queryRunner.manager.save(donation);
+      await qr.manager.save(donation);
 
-      // Update project totals
       if (donation.project) {
-        const project = donation.project;
-        project.currentAmount =
-          Number(project.currentAmount || 0) + Number(donation.amount);
-        project.donationCount = (project.donationCount || 0) + 1;
-        await queryRunner.manager.save(project);
+        donation.project.currentAmount += donation.amount;
+        donation.project.donationCount += 1;
+        await qr.manager.save(donation.project);
       }
 
-      await queryRunner.commitTransaction();
+      await qr.commitTransaction();
     } catch (err) {
-      await queryRunner.rollbackTransaction();
+      await qr.rollbackTransaction();
       throw new BadRequestException(
-        'Failed to process payment: ' +
-          (err instanceof Error ? err.message : 'Unknown error'),
+        `Failed to process payment: ${err instanceof Error ? err.message : 'Unknown'}`,
       );
     } finally {
-      await queryRunner.release();
+      await qr.release();
     }
   }
 
-  async handlePaymentFailed(paymentId: string) {
-    try {
-      const result = await this.donationRepo.update(
-        { paymentId, status: DonationStatusEnum.PENDING },
-        { status: DonationStatusEnum.FAILED },
-      );
-
-      if (result.affected === 0) {
-        throw new Error('No donation updated');
-      }
-    } catch (err) {
-      throw new ForbiddenException(
-        'Failed to update payment status: ' +
-          (err instanceof Error ? err.message : 'Unknown error'),
-      );
+  /**
+   * Mark a Stripe payment as failed
+   */
+  async handlePaymentFailed(sessionId: string): Promise<void> {
+    const result = await this.donationRepo.update(
+      { paymentId: sessionId, status: DonationStatusEnum.PENDING },
+      { status: DonationStatusEnum.FAILED },
+    );
+    if (result.affected === 0) {
+      throw new ForbiddenException('No pending donation updated');
     }
   }
 
-  async getPaymentStatus(paymentId: string): Promise<PaymentResult> {
-    try {
-      const session = await this.stripe.checkout.sessions.retrieve(paymentId);
-      const paymentIntent = session.payment_intent 
-        ? await this.stripe.paymentIntents.retrieve(session.payment_intent as string)
-        : null;
+  /**
+   * Retrieve Stripe payment status
+   */
+  async getPaymentStatus(id: string): Promise<PaymentResult> {
+    const session = await this.stripe.checkout.sessions.retrieve(id);
+    const intentId = session.payment_intent as string;
+    const intent = intentId
+      ? await this.stripe.paymentIntents.retrieve(intentId)
+      : null;
 
-      return {
-        id: paymentId,
-        status: this.mapStripeStatus(session.status || 'pending'),
-        amount: session.amount_total ? session.amount_total / 100 : 0, // Convert from cents
-        currency: session.currency?.toUpperCase() || 'USD',
-        paymentMethod: 'STRIPE',
-        metadata: {
-          paymentIntentStatus: paymentIntent?.status,
-          customerEmail: session.customer_email,
-          paymentDate: session.payment_status === 'paid' ? new Date().toISOString() : undefined,
-        },
-      };
-    } catch (error) {
-      if (error instanceof Error) {
-        throw new BadRequestException(
-          `Failed to get payment status: ${error.message}`,
-        );
-      }
-      throw new BadRequestException('Failed to get payment status');
-    }
+    return {
+      id,
+      status: this.mapStatus(session.status ?? 'unknown'),
+      amount: session.amount_total! / 100,
+      currency: session.currency!.toUpperCase(),
+      paymentMethod: 'STRIPE',
+      metadata: { paymentIntentStatus: intent?.status },
+    };
   }
 
-  private mapStripeStatus(stripeStatus: string): PaymentResult['status'] {
-    switch (stripeStatus) {
+  private mapStatus(status: string): PaymentResult['status'] {
+    switch (status) {
       case 'open':
       case 'created':
         return 'pending';
       case 'processing':
         return 'processing';
-      case 'complete':
       case 'paid':
+      case 'complete':
         return 'completed';
       default:
         return 'failed';

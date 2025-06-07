@@ -12,7 +12,6 @@ import {
   UploadedFile,
   ParseFilePipe,
   MaxFileSizeValidator,
-  FileTypeValidator,
   Res,
   StreamableFile,
   BadRequestException,
@@ -33,7 +32,6 @@ import { Role } from '../common/constants/roles.constant';
 @Controller('media')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class MediaController {
-
   constructor(private readonly mediaService: MediaService) {}
 
   @Post('upload')
@@ -62,11 +60,9 @@ export class MediaController {
       throw new BadRequestException('No file uploaded');
     }
 
-
-    
     // Convert file to Base64
     const base64Data = file.buffer.toString('base64');
-    
+
     // Create media DTO
     const createMediaDto: CreateMediaDto = {
       data: base64Data,
@@ -94,7 +90,7 @@ export class MediaController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
     const media = await this.mediaService.findOne(id);
-    
+
     // Set appropriate headers
     res.set({
       'Content-Type': media.mimeType,

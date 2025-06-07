@@ -2,27 +2,30 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MyFatooraService } from './myfatoora.service';
-import { MyFatooraController } from './myfatoora.controller';
 import { Donation } from '../donations/entities/donation.entity';
 import { Project } from '../projects/entities/project.entity';
-import { ProjectsModule } from '../projects/projects.module';
 
+/**
+ * Module providing MyFatoora integration services and configuration
+ */
 @Module({
   imports: [
-    ConfigModule,
-    ProjectsModule,
+    // Load environment variables globally
+    ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forFeature([Donation, Project]),
   ],
-  controllers: [MyFatooraController],
   providers: [
+    /**
+     * Configuration provider for MyFatoora integration
+     */
     {
-      provide: 'MYFATOORAH_CONFIG',
+      provide: 'MYFATOORA_CONFIG',
       useFactory: (configService: ConfigService) => ({
-        apiKey: configService.get<string>('MYFATOORAH_API_KEY'),
-        baseUrl: configService.get<string>('MYFATOORAH_BASE_URL'),
-        successUrl: configService.get<string>('MYFATOORAH_SUCCESS_URL'),
-        errorUrl: configService.get<string>('MYFATOORAH_ERROR_URL'),
-        webhookSecret: configService.get<string>('MYFATOORAH_WEBHOOK_SECRET'),
+        baseUrl: configService.get<string>('MYFATOORA_BASE_URL'),
+        apiKey: configService.get<string>('MYFATOORA_API_KEY'),
+        successUrl: configService.get<string>('MYFATOORA_SUCCESS_URL'),
+        errorUrl: configService.get<string>('MYFATOORA_ERROR_URL'),
+        webhookSecret: configService.get<string>('MYFATOORA_WEBHOOK_SECRET'),
       }),
       inject: [ConfigService],
     },

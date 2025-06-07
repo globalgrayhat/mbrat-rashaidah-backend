@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
   Injectable,
   NestInterceptor,
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { CustomLogger } from '../services/logger.service';
@@ -19,19 +18,26 @@ export class TrafficInterceptor implements NestInterceptor {
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<{
+      ip?: string;
+      originalUrl?: string;
+      headers?: Record<string, string | string[] | undefined>;
+      method?: string;
+    }>();
     const now = Date.now();
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const { ip, method, originalUrl, headers } = request;
+    const { ip = '', originalUrl = '', headers = {}, method = '' } = request;
 
     // Log request
     this.logger.log(`Incoming ${method} ${originalUrl}`, 'TrafficInterceptor');
 
     // Monitor request size
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const contentLength = headers['content-length']
-      ? parseInt(headers['content-length'], 10)
+      ? parseInt(
+          Array.isArray(headers['content-length'])
+            ? headers['content-length'][0]
+            : headers['content-length'],
+          10,
+        )
       : 0;
     if (contentLength > 1024 * 1024) {
       // If request size > 1MB
@@ -43,19 +49,19 @@ export class TrafficInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        // Removed 'response' parameter as it's not used
+        // Get response status code
+        const statusCode = context
+          .switchToHttp()
+          .getResponse<Response>().statusCode;
+
+        // Calculate response time
         const responseTime = Date.now() - now;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-        const statusCode = context.switchToHttp().getResponse().statusCode;
 
         // Track request in monitoring service
         this.monitoringService.trackRequest(
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           method,
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           originalUrl,
           responseTime,
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           statusCode,
         );
 
@@ -63,17 +69,17 @@ export class TrafficInterceptor implements NestInterceptor {
         this.logger.log(
           JSON.stringify({
             timestamp: new Date().toISOString(),
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
             method,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
             url: originalUrl,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
             ip,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+
             userAgent: headers['user-agent'],
             requestSize: contentLength,
             responseTime: `${responseTime}ms`,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
             statusCode,
           }),
           'TrafficMonitoring',
