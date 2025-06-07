@@ -32,7 +32,7 @@ export class CustomLogger implements LoggerService {
       ],
     });
   }
-
+  
   log(message: string, context?: string) {
     this.logger.info(message, { context });
   }
