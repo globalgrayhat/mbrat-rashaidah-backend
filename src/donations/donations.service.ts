@@ -214,7 +214,7 @@ export class DonationsService {
       // Update donation status
       donation.status = status;
       donation.paidAt =
-        status === DonationStatusEnum.COMPLETED ? new Date() : null;
+        status === DonationStatusEnum.COMPLETED ? new Date() : undefined;
       await queryRunner.manager.save(donation);
 
       if (status === DonationStatusEnum.COMPLETED && donation.project) {

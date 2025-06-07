@@ -7,28 +7,47 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+
 import { Project } from '../../projects/entities/project.entity';
 import { User } from '../../user/entities/user.entity';
 import { DonationStatusEnum } from '../../common/constants/donationStatus.constant';
 import { PaymentMethodEnum } from '../../common/constants/payment.constant';
 
+/**
+ * Represents a donation record made by a user towards a project
+ */
 @Entity('donations')
 export class Donation {
+  /**
+   * Primary key: UUID generated automatically
+   */
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  /**
+   * Amount donated
+   */
   @Column('decimal', { precision: 10, scale: 2 })
   amount: number;
 
-  @Column()
+  /**
+   * Currency code for the donation (e.g., USD, EUR)
+   */
+  @Column({ length: 3 })
   currency: string;
 
+  /**
+   * Payment method used for the donation
+   */
   @Column({
     type: 'enum',
     enum: PaymentMethodEnum,
   })
   paymentMethod: PaymentMethodEnum;
 
+  /**
+   * Current status of the donation
+   */
   @Column({
     type: 'enum',
     enum: DonationStatusEnum,
@@ -36,32 +55,59 @@ export class Donation {
   })
   status: DonationStatusEnum;
 
-  @Column({ nullable: true })
-  paymentId: string;
+  /**
+   * External payment gateway transaction ID
+   */
+  @Column({ length: 255, nullable: true })
+  paymentId?: string;
 
-  @Column('jsonb', { nullable: true })
-  paymentDetails: any;
+  /**
+   * Additional payment details stored as JSON
+   */
+  @Column('json', { nullable: true })
+  paymentDetails?: any;
 
+  /**
+   * Timestamp when payment was completed
+   */
   @Column({ type: 'timestamp', nullable: true })
-  paidAt: Date | null;
+  paidAt?: Date;
 
-  @ManyToOne(() => Project)
+  /**
+   * Associated project for this donation
+   */
+  @ManyToOne(() => Project, { eager: true })
   @JoinColumn({ name: 'projectId' })
   project: Project;
 
-  @Column()
+  /**
+   * Foreign key for project
+   */
+  @Column('uuid')
   projectId: string;
 
-  @ManyToOne(() => User, { nullable: true })
+  /**
+   * Donor who made the donation (optional)
+   */
+  @ManyToOne(() => User, { nullable: true, eager: true })
   @JoinColumn({ name: 'donorId' })
-  donor: User;
+  donor?: User;
 
-  @Column({ nullable: true })
-  donorId: string;
+  /**
+   * Foreign key for donor user
+   */
+  @Column('uuid', { nullable: true })
+  donorId?: string;
 
-  @CreateDateColumn()
+  /**
+   * Timestamp when the donation record was created
+   */
+  @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  /**
+   * Timestamp when the donation record was last updated
+   */
+  @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 }

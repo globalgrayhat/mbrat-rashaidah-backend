@@ -12,45 +12,87 @@ import {
 import { Project } from '../../projects/entities/project.entity';
 import { Continent } from '../../continents/entities/continent.entity';
 
+/**
+ * Represents a country with metadata and its related projects
+ */
 @Entity('countries')
 export class Country {
+  /**
+   * Primary key: UUID generated automatically
+   */
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  /**
+   * Official name of the country
+   */
+  @Column({ length: 255 })
   name: string;
 
+  /**
+   * ISO 2-letter country code (unique)
+   */
   @Column({ length: 2, unique: true })
   code: string;
 
-  @Column({ nullable: true })
-  flagUrl: string;
+  /**
+   * URL to the country's flag image
+   */
+  @Column({ length: 500, nullable: true })
+  flagUrl?: string;
 
-  @Column({ nullable: true })
-  phoneCode: string;
+  /**
+   * International dialing code
+   */
+  @Column({ length: 10, nullable: true })
+  phoneCode?: string;
 
-  @Column({ nullable: true })
-  currencyCode: string;
+  /**
+   * ISO currency code
+   */
+  @Column({ length: 3, nullable: true })
+  currencyCode?: string;
 
-  @Column({ nullable: true })
-  currencySymbol: string;
+  /**
+   * Symbol used for the currency
+   */
+  @Column({ length: 5, nullable: true })
+  currencySymbol?: string;
 
+  /**
+   * Flag indicating if the country is active
+   */
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'uuid' })
+  /**
+   * Foreign key referencing the continent
+   */
+  @Column('uuid')
   continentId: string;
 
-  @ManyToOne(() => Continent)
+  /**
+   * Continent associated with this country
+   */
+  @ManyToOne(() => Continent, { eager: true })
   @JoinColumn({ name: 'continentId' })
   continent: Continent;
 
+  /**
+   * List of projects under this country
+   */
   @OneToMany(() => Project, (project) => project.country)
   projects: Project[];
 
-  @CreateDateColumn()
+  /**
+   * Timestamp when the country record was created
+   */
+  @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  /**
+   * Timestamp when the country record was last updated
+   */
+  @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 }

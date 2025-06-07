@@ -18,14 +18,21 @@ export class OtpService {
   async createAndSend(email: string): Promise<void> {
     if (!this.cfg.otpEnabled) return;
     const EXP_MINUTES = this.cfg.otpExpiresIn;
-    const otp = generateOTP();
+    const otpLength = this.cfg.otpLength || 6;
+    const otp = generateOTP(otpLength);
     const otpExpires = new Date(Date.now() + EXP_MINUTES * 60_000);
     await this.userService.updateByEmail(email, { otp, otpExpires });
 
     await this.mailService.sendMail(
       email,
-      'One‑Time Password',
-      `OTP: ${otp}\n\nExpires in ${EXP_MINUTES} minutes.`,
+
+      `رمز التحقق المؤقت - ${this.cfg.appName}`,
+      `السلام عليكم،
+       رمز التحقق المؤقت (OTP) الخاص بك في ${this.cfg.appName} هو:
+       ${otp}
+       مدة صلاحية الرمز: ${EXP_MINUTES} دقيقة.
+       إذا لم تكن أنت من طلب هذا الرمز، يرجى تجاهل هذه الرسالة.
+       شكراً لاستخدامك خدماتنا.`,
     );
   }
 

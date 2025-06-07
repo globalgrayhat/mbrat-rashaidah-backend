@@ -7,29 +7,56 @@ import {
 } from 'typeorm';
 import { Role } from '../../common/constants/roles.constant';
 
+/**
+ * Represents a user in the system
+ */
 @Entity('users')
 export class User {
+  /**
+   * Primary key: UUID generated automatically
+   */
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  /**
+   * User's unique email address
+   */
+  @Column({ unique: true, length: 255 })
   email: string;
 
-  @Column()
+  /**
+   * User's hashed password
+   */
+  @Column({ length: 255 })
   password: string;
 
-  @Column({ nullable: true })
+  /**
+   * One-time password for MFA or verification
+   */
+  @Column({ nullable: true, length: 6 })
   otp?: string;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  /**
+   * Expiration time for the one-time password
+   */
+  @Column({ type: 'timestamp', nullable: true })
   otpExpires?: Date;
 
+  /**
+   * Indicates whether the user's email has been verified
+   */
   @Column({ default: false })
   isVerified: boolean;
 
-  @Column({ nullable: true })
+  /**
+   * Refresh token for session management
+   */
+  @Column({ nullable: true, length: 500 })
   refreshToken?: string;
 
+  /**
+   * Role of the user (e.g., USER, ADMIN)
+   */
   @Column({
     type: 'enum',
     enum: Role,
@@ -37,9 +64,15 @@ export class User {
   })
   role: Role;
 
-  @CreateDateColumn()
+  /**
+   * Timestamp when the user was created
+   */
+  @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  /**
+   * Timestamp when the user was last updated
+   */
+  @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 }

@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppConfigModule } from './config/config.module';
 import { AppConfigService } from './config/config.service';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { AdminModule } from './admin/admin.module';
@@ -36,12 +38,12 @@ import { StripeModule } from './stripe/stripe.module';
       imports: [AppConfigModule],
       useFactory: (config: AppConfigService) => ({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        type: config.type as any,
-        host: config.host,
-        port: config.port,
-        username: config.user,
-        password: config.password,
-        database: config.database,
+        type: config.typeDatabase as any,
+        host: config.hostDatabase,
+        port: config.portDatabase,
+        username: config.userDatabase,
+        password: config.passwordDatabase,
+        database: config.nameDatabase,
         entities: [
           User,
           Banner,
@@ -71,6 +73,7 @@ import { StripeModule } from './stripe/stripe.module';
     MyFatooraModule,
     StripeModule,
   ],
-  providers: [TrafficInterceptor, CustomLogger, MonitoringService],
+  controllers: [AppController],
+  providers: [AppService, TrafficInterceptor, CustomLogger, MonitoringService],
 })
 export class AppModule {}

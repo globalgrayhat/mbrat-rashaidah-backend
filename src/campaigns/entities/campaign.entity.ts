@@ -1,4 +1,3 @@
-// [FIXED 2025-06-04]
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -8,35 +7,65 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+
 import { Project } from '../../projects/entities/project.entity';
 import { User } from '../../user/entities/user.entity';
 import { CampaignPurposeEnum } from '../../common/constants/campaignPurpose.constant';
 import { CampaignStatusEnum } from '../../common/constants/campaignStatus.constant';
 
-
+/**
+ * Represents a fundraising campaign linked to a project or managed by an official
+ */
 @Entity('campaigns')
 export class Campaign {
+  /**
+   * Primary key: UUID generated automatically
+   */
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  /**
+   * Unique campaign name
+   */
+  @Column({ unique: true, length: 255 })
   name: string;
 
-  @Column({ type: 'text', nullable: true })
-  description: string;
+  /**
+   * Detailed description of the campaign
+   */
+  @Column('text', { nullable: true })
+  description?: string;
 
+  /**
+   * Total amount required for the campaign
+   */
   @Column('decimal', { precision: 10, scale: 2 })
   amountRequired: number;
 
+  /**
+   * Amount raised so far
+   */
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   amountRaised: number;
 
+  /**
+   * Remaining amount left to raise
+   */
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   amountLeft: number;
 
-  @Column({ type: 'enum', enum: CampaignPurposeEnum })
+  /**
+   * Purpose category of the campaign
+   */
+  @Column({
+    type: 'enum',
+    enum: CampaignPurposeEnum,
+  })
   purpose: CampaignPurposeEnum;
 
+  /**
+   * Current status of the campaign
+   */
   @Column({
     type: 'enum',
     enum: CampaignStatusEnum,
@@ -44,24 +73,41 @@ export class Campaign {
   })
   campaignStatus: CampaignStatusEnum;
 
-  @ManyToOne(() => User, { nullable: false })
+  /**
+   * Official user responsible for the campaign
+   */
+  @ManyToOne(() => User, { nullable: false, eager: true })
   @JoinColumn({ name: 'officialId' })
   official: User;
 
-  @Column()
+  /**
+   * Foreign key for the official user
+   */
+  @Column('uuid')
   officialId: string;
 
-  // [FIXED 2025-06-04] Add relation to project
-  @ManyToOne(() => Project, { nullable: true })
+  /**
+   * Optional related project for the campaign
+   */
+  @ManyToOne(() => Project, { nullable: true, eager: true })
   @JoinColumn({ name: 'projectId' })
-  project: Project;
+  project?: Project;
 
-  @Column({ nullable: true })
-  projectId: string;
+  /**
+   * Foreign key for the related project
+   */
+  @Column('uuid', { nullable: true })
+  projectId?: string;
 
-  @CreateDateColumn()
+  /**
+   * Timestamp when the campaign was created
+   */
+  @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  /**
+   * Timestamp when the campaign was last updated
+   */
+  @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 }

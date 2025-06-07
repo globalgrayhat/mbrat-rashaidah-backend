@@ -1,6 +1,6 @@
 # NestJS Backend with passport Authentication
 
-This is a NestJS backend application that uses passport for authentication and PostgreSQL with TypeORM for data management.
+This is a NestJS backend application that uses passport for authentication and MySQL with TypeORM for data management.
 
 ## Features
 
@@ -74,7 +74,7 @@ This is a NestJS backend application that uses passport for authentication and P
 ## Prerequisites
 
 - Node.js (v20.18.0 or higher)
-- PostgreSQL database
+- MySQL database
 
 ## Installation
 
@@ -94,9 +94,14 @@ npm i
 3. Create a `.env` file in the root directory with the following variables:
 
 ```env
+# App Config
+APP_NAME=mbrat-rashaidah-backend
+PORT=3003
+ALLOWED_ORIGINS=https://localhost,https://admin.localhost
+BASE_DOMAIN=localhost
+API_DOMAIN=localhost
 # Environment
 NODE_ENV=development
-APP=3000
 # Database
 TYPE=postgres
 HOST=localhost
@@ -118,7 +123,7 @@ MAIL_HOST=smtp.gmail.com
 MAIL_PORT=465
 MAIL_SECURE=SSL
 MAIL_USER=studentofthecourse@gmail.com
-MAIL_PASS=sfgsgsfgdgfg dfdsf
+MAIL_PASS=gdgdgfddvfsvsdfvdddddddddd
 MAIL_FROM=studentofthecourse@gmail.com
 MAIL_FROM_NAME=No‑Reply
 # Payment
@@ -126,10 +131,11 @@ MAIL_FROM_NAME=No‑Reply
 STRIPE_SECRET_KEY=nsjsdjabsdjab
 STRIPE_WEBHOOK_SECRET=nsjsdjabsdjab
 # Myfatoora
-MYFATOORA_API_KEY=aqweqe
-MYFATOORA_API_URL=saaasa
-MYFATOORA_CALLBACK_URL=saaasa
-MYFATOORA_ERROR_URL=lnjbjkbkj
+MYFATOORA_BASE_URL=https://api.myfatoorah.com
+MYFATOORA_API_KEY=your_api_key_here
+MYFATOORA_SUCCESS_URL=https://yourapp.com/payments/myfatoora/success
+MYFATOORA_ERROR_URL=https://yourapp.com/payments/myfatoora/cancel
+MYFATOORA_WEBHOOK_SECRET=optional_webhook_secret
 ```
 
 4. Set up the database:
@@ -155,118 +161,140 @@ npm run start:prod
 
 ## API Endpoints
 
-## User & Authentication
+### User & Authentication
 
-- `POST /auth/register` — Register a new user
-- `POST /auth/login` — User login
-- `POST /auth/otp-verify` — Verify OTP code
-- `POST /auth/refresh` — Refresh access token
-- `GET /auth/profile` — Get logged-in user's profile
+| Method | Path               | Description              |
+| ------ | ------------------ | ------------------------ |
+| POST   | `/auth/register`   | Register a new user      |
+| POST   | `/auth/login`      | Log in and receive JWT   |
+| POST   | `/auth/otp-verify` | Verify OTP code          |
+| POST   | `/auth/refresh`    | Refresh JWT token        |
+| GET    | `/auth/profile`    | Get current user profile |
 
-## User Management
+### Users
 
-- `POST /users` — Create a user
-- `GET /users` — Get all users
-- `GET /users/:id` — Get user by ID
-- `PUT /users/:id` — Update user
-- `DELETE /users/:id` — Delete user
+| Method | Path         | Description       |
+| ------ | ------------ | ----------------- |
+| POST   | `/users`     | Create a new user |
+| GET    | `/users`     | List all users    |
+| GET    | `/users/:id` | Get user by ID    |
+| PUT    | `/users/:id` | Update user by ID |
+| DELETE | `/users/:id` | Delete user by ID |
 
-## Admin Management
+### Admin (Role Management)
 
-- `GET /admin/users` — Get all users (admin only)
-- `GET /admin/users/:id` — Get specific user
-- `POST /admin/users/:id/role` — Update user role (super_admin only)
-- `DELETE /admin/users/:id` — Delete user
+| Method | Path                    | Description                   |
+| ------ | ----------------------- | ----------------------------- |
+| GET    | `/admin/users`          | List all users (admin only)   |
+| GET    | `/admin/users/:id`      | Get user by ID (admin only)   |
+| POST   | `/admin/users/:id/role` | Change user role (admin only) |
+| DELETE | `/admin/users/:id`      | Delete user (admin only)      |
 
-## Project Management
+### Banners
 
-- `POST /projects` — Create a project
-- `GET /projects` — Get all projects
-- `GET /projects/:id` — Get project by ID
-- `PATCH /projects/:id` — Update project
-- `DELETE /projects/:id` — Delete project
-- `GET /projects/category/:categoryId` — Filter by category
-- `GET /projects/country/:countryId` — Filter by country
-- `GET /projects/status/:status` — Filter by status
-- `GET /projects/details/:projectId` — Get project details
-- `GET /projects/stats/summary` — Get project summary stats
+| Method | Path           | Description         |
+| ------ | -------------- | ------------------- |
+| POST   | `/banners`     | Create a banner     |
+| GET    | `/banners`     | List all banners    |
+| GET    | `/banners/:id` | Get banner by ID    |
+| PATCH  | `/banners/:id` | Update banner by ID |
+| DELETE | `/banners/:id` | Delete banner by ID |
 
-## Campaigns
+### Projects
 
-- `GET /campaigns` — List all campaigns
-- `POST /campaigns` — Create a campaign
-- `GET /campaigns/:id` — Get campaign by ID
-- `PUT /campaigns/:id` — Update campaign
-- `DELETE /campaigns/:id` — Delete campaign
+| Method | Path                             | Description                    |
+| ------ | -------------------------------- | ------------------------------ |
+| POST   | `/projects`                      | Create a new project           |
+| GET    | `/projects`                      | List all projects              |
+| GET    | `/projects/:id`                  | Get project by ID              |
+| PATCH  | `/projects/:id`                  | Update project by ID           |
+| DELETE | `/projects/:id`                  | Delete project by ID           |
+| GET    | `/projects/category/:categoryId` | List projects by category      |
+| GET    | `/projects/country/:countryId`   | List projects by country       |
+| GET    | `/projects/status/:status`       | List projects by status        |
+| GET    | `/projects/details/:projectId`   | Get project details with stats |
+| GET    | `/projects/stats/summary`        | Get summary statistics         |
 
-## Donations
+### Categories
 
-- `GET /donations/project/:projectId` — Get donations for a project
-- `POST /donations/project/:projectId` — Make a donation to a project
-- `GET /donations/:id` — Get donation by ID
-- `DELETE /donations/:id` — Delete donation
-- `POST /donations/webhook/stripe` — Stripe webhook
-- `POST /donations/webhook/myfatoora` — MyFatoora webhook
-
-## Payment Integrations
-
-### Stripe
-
-- `POST /stripe/webhook`
-- `GET /stripe/payment/:id`
-- `GET /stripe/success/:donationId`
-- `GET /stripe/cancel/:donationId`
-
-### MyFatoora
-
-- `POST /myfatoora/webhook`
-- `GET /myfatoora/payment/:id`
-- `GET /myfatoora/success/:donationId`
-- `GET /myfatoora/cancel/:donationId`
-
-## Countries & Continents
+| Method | Path                     | Description           |
+| ------ | ------------------------ | --------------------- |
+| POST   | `/categories`            | Create a new category |
+| GET    | `/categories`            | List all categories   |
+| GET    | `/categories/:id`        | Get category by ID    |
+| GET    | `/categories/slug/:slug` | Get category by slug  |
+| PATCH  | `/categories/:id`        | Update category by ID |
+| DELETE | `/categories/:id`        | Delete category by ID |
 
 ### Countries
 
-- `POST /countries`
-- `GET /countries`
-- `GET /countries/:id`
-- `PUT /countries/:id`
-- `DELETE /countries/:id`
+| Method | Path             | Description          |
+| ------ | ---------------- | -------------------- |
+| POST   | `/countries`     | Create a new country |
+| GET    | `/countries`     | List all countries   |
+| GET    | `/countries/:id` | Get country by ID    |
+| PUT    | `/countries/:id` | Update country by ID |
+| DELETE | `/countries/:id` | Delete country by ID |
 
 ### Continents
 
-- `POST /continents`
-- `GET /continents`
-- `GET /continents/:id`
-- `PUT /continents/:id`
-- `DELETE /continents/:id`
+| Method | Path              | Description            |
+| ------ | ----------------- | ---------------------- |
+| POST   | `/continents`     | Create a new continent |
+| GET    | `/continents`     | List all continents    |
+| GET    | `/continents/:id` | Get continent by ID    |
+| PUT    | `/continents/:id` | Update continent by ID |
+| DELETE | `/continents/:id` | Delete continent by ID |
 
-## Categories
+### Media
 
-- `POST /categories`
-- `GET /categories`
-- `GET /categories/:id`
-- `GET /categories/slug/:slug`
-- `PATCH /categories/:id`
-- `DELETE /categories/:id`
+| Method | Path              | Description                |
+| ------ | ----------------- | -------------------------- |
+| POST   | `/media/upload`   | Upload a media file        |
+| GET    | `/media`          | List all media             |
+| GET    | `/media/:id`      | Get media metadata by ID   |
+| GET    | `/media/:id/data` | Download media binary data |
+| PATCH  | `/media/:id`      | Update media metadata      |
+| DELETE | `/media/:id`      | Delete media by ID         |
 
-## Banners
+### Campaigns
 
-- `POST /banners`
-- `GET /banners`
-- `GET /banners/:id`
-- `PATCH /banners/:id`
-- `DELETE /banners/:id`
+| Method | Path             | Description           |
+| ------ | ---------------- | --------------------- |
+| GET    | `/campaigns`     | List all campaigns    |
+| POST   | `/campaigns`     | Create a new campaign |
+| GET    | `/campaigns/:id` | Get campaign by ID    |
+| PUT    | `/campaigns/:id` | Update campaign by ID |
+| DELETE | `/campaigns/:id` | Delete campaign by ID |
 
-## Media
+### Donations
 
-- `POST /media/upload`
-- `GET /media`
-- `GET /media/:id`
-- `GET /media/:id/data`
-- `PATCH /media/:id`
-- `DELETE /media/:id`
+| Method | Path                            | Description                     |
+| ------ | ------------------------------- | ------------------------------- |
+| GET    | `/donations/project/:projectId` | List donations for a project    |
+| POST   | `/donations/project/:projectId` | Create a donation for a project |
+| GET    | `/donations/:id`                | Get a donation by ID            |
+| DELETE | `/donations/:id`                | Delete a donation by ID         |
+| POST   | `/donations/webhook/stripe`     | Stripe webhook handling         |
+| POST   | `/donations/webhook/myfatoora`  | MyFatoora webhook handling      |
+
+### Stripe Gateway
+
+| Method | Path                          | Description                           |
+| ------ | ----------------------------- | ------------------------------------- |
+| POST   | `/stripe/webhook`             | Stripe webhook endpoint               |
+| GET    | `/stripe/status/:id`          | Check Stripe payment status           |
+| GET    | `/stripe/success/:donationId` | Redirect on successful Stripe payment |
+| GET    | `/stripe/cancel/:donationId`  | Redirect on canceled Stripe payment   |
+
+### MyFatoora Gateway
+
+| Method | Path                             | Description                              |
+| ------ | -------------------------------- | ---------------------------------------- |
+| POST   | `/myfatoora/webhook`             | MyFatoora webhook endpoint               |
+| GET    | `/myfatoora/status/:id`          | Check MyFatoora payment status           |
+| GET    | `/myfatoora/success/:donationId` | Redirect on successful MyFatoora payment |
+| GET    | `/myfatoora/cancel/:donationId`  | Redirect on canceled MyFatoora payment   |
 
 ## Security Features
 
@@ -431,7 +459,9 @@ npm run start:prod
         └── user.controller.ts
         └── user.module.ts
         └── user.service.ts
+    └── app.controller.ts
     └── app.module.ts
+    └── app.service.ts
     └── main.ts
 ```
 

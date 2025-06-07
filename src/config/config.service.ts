@@ -8,6 +8,57 @@ import { ConfigService } from '@nestjs/config';
 export class AppConfigService {
   constructor(private configService: ConfigService) {}
 
+  /** ==================== App Config ==================== */
+
+  /** Application name */
+  get appName(): string {
+    return this.configService.get<string>('APP_NAME') ?? 'GlobalGrayHat';
+  }
+
+  /** Application port */
+  get port(): number {
+    return Number(this.configService.get<string>('PORT') ?? 3000);
+  }
+
+  /** The main domain (e.g. example.com) */
+  get baseDomain(): string {
+    return this.configService.get<string>('BASE_DOMAIN') ?? 'localhost';
+  }
+
+  /** The subdomain used for API (e.g. api.example.com) */
+  get apiDomain(): string {
+    return (
+      this.configService.get<string>('API_DOMAIN') ?? `api.${this.baseDomain}`
+    );
+  }
+
+  /** Allowed CORS origins (comma separated) */
+  get allowedOrigins(): string[] {
+    // Get raw origins string from environment
+    const rawOrigins = this.configService.get<string>('ALLOWED_ORIGINS');
+
+    // Split and trim the origins if defined, otherwise start with an empty array
+    const origins = rawOrigins
+      ? rawOrigins.split(',').map((origin) => origin.trim())
+      : [];
+
+    // Compose default domains
+    const base = `https://${this.baseDomain}`;
+    const api = `https://${this.apiDomain}`;
+
+    // Add base domain if it's not already included
+    if (!origins.includes(base)) {
+      origins.push(base);
+    }
+
+    // Add API domain if it's not already included
+    if (!origins.includes(api)) {
+      origins.push(api);
+    }
+
+    return origins;
+  }
+
   /** ==================== Environment ==================== */
 
   /** Check if running in development environment */
@@ -28,31 +79,31 @@ export class AppConfigService {
   /** ==================== Database Configuration ==================== */
 
   /** host */
-  get type(): string {
+  get typeDatabase(): string {
     return this.configService.get<string>('TYPE') || '';
   }
   /** host */
-  get host(): string {
+  get hostDatabase(): string {
     return this.configService.get<string>('HOST') || '';
   }
 
   /** port */
-  get port(): number {
-    return this.configService.get<number>('PORT_DATABASE') || 5432;
+  get portDatabase(): number {
+    return this.configService.get<number>('PORT_DATABASE') || 3306;
   }
 
   /** username */
-  get user(): string {
+  get userDatabase(): string {
     return this.configService.get<string>('USER') || '';
   }
 
   /** password */
-  get password(): string {
+  get passwordDatabase(): string {
     return this.configService.get<string>('PASSWORD') || '';
   }
 
   /** database name */
-  get database(): string {
+  get nameDatabase(): string {
     return this.configService.get<string>('DB') || '';
   }
 
@@ -88,6 +139,10 @@ export class AppConfigService {
   /** Set time to OTP */
   get otpExpiresIn(): number {
     return this.configService.get<number>('EXP_MINUTES', 1);
+  }
+  /** Set length to OTP */
+  get otpLength(): number {
+    return this.configService.get<number>('OTP_LENGTH', 6);
   }
 
   /** ==================== Mail Server Configuration ==================== */
