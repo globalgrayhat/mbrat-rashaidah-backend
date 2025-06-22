@@ -14,6 +14,8 @@ export declare class ProjectsService {
     private readonly continentRepository;
     private readonly mediaRepository;
     constructor(projectRepository: Repository<Project>, categoryRepository: Repository<Category>, countryRepository: Repository<Country>, continentRepository: Repository<Continent>, mediaRepository: Repository<Media>);
+    private ensureEntityExists;
+    private ensureSlugUnique;
     create(createProjectDto: CreateProjectDto): Promise<Project>;
     findAll(): Promise<Project[]>;
     findOne(id: string): Promise<Project>;

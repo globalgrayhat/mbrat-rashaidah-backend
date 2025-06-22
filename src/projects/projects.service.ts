@@ -29,6 +29,25 @@ export class ProjectsService {
     private readonly mediaRepository: Repository<Media>,
   ) {}
 
+  private async ensureEntityExists<T extends Record<string, any>>(
+    repo: Repository<T>,
+    id: string,
+    entityName: string,
+  ): Promise<T> {
+    const entity = await repo.findOne({ where: { id: id as any } });
+    if (!entity) {
+      throw new NotFoundException(`${entityName} with ID "${id}" not found.`);
+    }
+    return entity;
+  }
+
+  private async ensureSlugUnique(slug: string): Promise<void> {
+    const existing = await this.projectRepository.findOne({ where: { slug } });
+    if (existing) {
+      throw new ConflictException(`Slug "${slug}" is already in use.`);
+    }
+  }
+
   async create(createProjectDto: CreateProjectDto): Promise<Project> {
     const {
       title,
@@ -146,71 +165,55 @@ export class ProjectsService {
     id: string,
     updateProjectDto: UpdateProjectDto,
   ): Promise<Project> {
-    // 1) Load existing, or 404
     const project = await this.findOne(id);
 
-    // 2) If incoming DTO has a slug change, check uniqueness
     if (updateProjectDto.slug && updateProjectDto.slug !== project.slug) {
-      const duplicate = await this.projectRepository.findOne({
-        where: { slug: updateProjectDto.slug },
-      });
-      if (duplicate) {
-        throw new ConflictException(
-          `Slug "${updateProjectDto.slug}" is already in use.`,
-        );
-      }
+      await this.ensureSlugUnique(updateProjectDto.slug);
     }
 
-    // 3) If they’re updating categoryId/countryId/continentId, verify those too
     if (updateProjectDto.categoryId) {
-      const category = await this.categoryRepository.findOne({
-        where: { id: updateProjectDto.categoryId },
-      });
-      if (!category) {
-        throw new NotFoundException(
-          `Category with ID "${updateProjectDto.categoryId}" not found.`,
-        );
-      }
+      await this.ensureEntityExists(
+        this.categoryRepository,
+        updateProjectDto.categoryId,
+        'Category',
+      );
     }
     if (updateProjectDto.countryId) {
-      const country = await this.countryRepository.findOne({
-        where: { id: updateProjectDto.countryId },
-      });
-      if (!country) {
-        throw new NotFoundException(
-          `Country with ID "${updateProjectDto.countryId}" not found.`,
-        );
-      }
+      await this.ensureEntityExists(
+        this.countryRepository,
+        updateProjectDto.countryId,
+        'Country',
+      );
     }
     if (updateProjectDto.continentId) {
-      const continent = await this.continentRepository.findOne({
-        where: { id: updateProjectDto.continentId },
-      });
-      if (!continent) {
-        throw new NotFoundException(
-          `Continent with ID "${updateProjectDto.continentId}" not found.`,
-        );
-      }
+      await this.ensureEntityExists(
+        this.continentRepository,
+        updateProjectDto.continentId,
+        'Continent',
+      );
     }
 
-    // 4) Merge DTO into entity and re-attach media if needed
     Object.assign(project, updateProjectDto);
 
     if (updateProjectDto.mediaIds) {
       const medias = await this.mediaRepository.findByIds(
         updateProjectDto.mediaIds,
       );
-      if (medias.length !== updateProjectDto.mediaIds.length) {
-        throw new NotFoundException(`One or more media items not found.`);
+      const foundIds = medias.map((m) => m.id);
+      const missingIds = updateProjectDto.mediaIds.filter(
+        (id) => !foundIds.includes(id),
+      );
+      if (missingIds.length > 0) {
+        throw new NotFoundException(
+          `Media items not found: ${missingIds.join(', ')}`,
+        );
       }
       project.media = medias;
     }
 
-    // 5) Finally save the updated project
     try {
       return await this.projectRepository.save(project);
     } catch (err) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       if (err instanceof QueryFailedError && (err as any).code === '23505') {
         throw new ConflictException(
           `Project slug "${updateProjectDto.slug}" already exists.`,

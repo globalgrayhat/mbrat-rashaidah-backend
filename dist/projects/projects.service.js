@@ -35,6 +35,19 @@ let ProjectsService = class ProjectsService {
         this.continentRepository = continentRepository;
         this.mediaRepository = mediaRepository;
     }
+    async ensureEntityExists(repo, id, entityName) {
+        const entity = await repo.findOne({ where: { id: id } });
+        if (!entity) {
+            throw new common_1.NotFoundException(`${entityName} with ID "${id}" not found.`);
+        }
+        return entity;
+    }
+    async ensureSlugUnique(slug) {
+        const existing = await this.projectRepository.findOne({ where: { slug } });
+        if (existing) {
+            throw new common_1.ConflictException(`Slug "${slug}" is already in use.`);
+        }
+    }
     async create(createProjectDto) {
         const { title, slug, categoryId, countryId, continentId, mediaIds = [], } = createProjectDto;
         const existingBySlug = await this.projectRepository.findOne({
@@ -118,42 +131,24 @@ let ProjectsService = class ProjectsService {
     async update(id, updateProjectDto) {
         const project = await this.findOne(id);
         if (updateProjectDto.slug && updateProjectDto.slug !== project.slug) {
-            const duplicate = await this.projectRepository.findOne({
-                where: { slug: updateProjectDto.slug },
-            });
-            if (duplicate) {
-                throw new common_1.ConflictException(`Slug "${updateProjectDto.slug}" is already in use.`);
-            }
+            await this.ensureSlugUnique(updateProjectDto.slug);
         }
         if (updateProjectDto.categoryId) {
-            const category = await this.categoryRepository.findOne({
-                where: { id: updateProjectDto.categoryId },
-            });
-            if (!category) {
-                throw new common_1.NotFoundException(`Category with ID "${updateProjectDto.categoryId}" not found.`);
-            }
+            await this.ensureEntityExists(this.categoryRepository, updateProjectDto.categoryId, 'Category');
         }
         if (updateProjectDto.countryId) {
-            const country = await this.countryRepository.findOne({
-                where: { id: updateProjectDto.countryId },
-            });
-            if (!country) {
-                throw new common_1.NotFoundException(`Country with ID "${updateProjectDto.countryId}" not found.`);
-            }
+            await this.ensureEntityExists(this.countryRepository, updateProjectDto.countryId, 'Country');
         }
         if (updateProjectDto.continentId) {
-            const continent = await this.continentRepository.findOne({
-                where: { id: updateProjectDto.continentId },
-            });
-            if (!continent) {
-                throw new common_1.NotFoundException(`Continent with ID "${updateProjectDto.continentId}" not found.`);
-            }
+            await this.ensureEntityExists(this.continentRepository, updateProjectDto.continentId, 'Continent');
         }
         Object.assign(project, updateProjectDto);
         if (updateProjectDto.mediaIds) {
             const medias = await this.mediaRepository.findByIds(updateProjectDto.mediaIds);
-            if (medias.length !== updateProjectDto.mediaIds.length) {
-                throw new common_1.NotFoundException(`One or more media items not found.`);
+            const foundIds = medias.map((m) => m.id);
+            const missingIds = updateProjectDto.mediaIds.filter((id) => !foundIds.includes(id));
+            if (missingIds.length > 0) {
+                throw new common_1.NotFoundException(`Media items not found: ${missingIds.join(', ')}`);
             }
             project.media = medias;
         }
