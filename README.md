@@ -101,7 +101,8 @@ ALLOWED_ORIGINS=https://localhost,https://admin.localhost
 BASE_DOMAIN=localhost
 API_DOMAIN=localhost
 # Environment
-NODE_ENV=development
+NODE_ENV=development or production
+NODE_OPTIONS=--max-old-space-size=512
 # Database
 TYPE_DATABASE=mysql
 HOST_DATABASE=localhost
