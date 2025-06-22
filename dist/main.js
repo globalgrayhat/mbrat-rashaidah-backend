@@ -23,12 +23,15 @@ async function bootstrap() {
         forbidNonWhitelisted: true,
     }));
     app.useGlobalInterceptors(app.get(traffic_interceptor_1.TrafficInterceptor));
-    await app.listen(configService.port);
     if (isDev) {
         console.log('🧪 Development mode: CORS enabled for any origin');
     }
     const protocol = isDev ? 'http' : 'https';
     console.log(`🚀 ${configService.appName} is running at ${protocol}://${configService.apiDomain}:${configService.port}`);
+    return app.getHttpAdapter().getInstance();
 }
-bootstrap();
+exports.default = async (req, res) => {
+    const server = await bootstrap();
+    server(req, res);
+};
 //# sourceMappingURL=main.js.map
