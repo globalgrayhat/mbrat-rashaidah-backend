@@ -1,23 +1,23 @@
-# Use Node.js 20 Alpine image
-FROM node:20-alpine
+# Use official Node.js 20 image from the Docker Hub
+FROM node:20-slim
 
-# Set the working directory in the container
+# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the package.json and package-lock.json (or yarn.lock) files
+# Copy package.json and package-lock.json (or npm-shrinkwrap.json)
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --production
+# Install dependencies using npm ci (this ensures clean install)
+RUN npm ci
 
-# Copy the entire application code
+# Copy the rest of the application code
 COPY . .
 
-# Build the application
+# Build the NestJS application
 RUN npm run build
 
 # Expose the application port
 EXPOSE 3003
 
-# Start the application in production mode
+# Set the command to run the application in production
 CMD ["npm", "run", "start:prod"]
