@@ -20,24 +20,24 @@ const banners_module_1 = require("./banners/banners.module");
 const projects_module_1 = require("./projects/projects.module");
 const categories_module_1 = require("./categories/categories.module");
 const media_module_1 = require("./media/media.module");
+const countries_module_1 = require("./countries/countries.module");
+const continents_module_1 = require("./continents/continents.module");
+const campaigns_module_1 = require("./campaigns/campaigns.module");
+const donations_module_1 = require("./donations/donations.module");
+const myfatoora_module_1 = require("./myfatoora/myfatoora.module");
+const stripe_module_1 = require("./stripe/stripe.module");
 const user_entity_1 = require("./user/entities/user.entity");
 const banner_entity_1 = require("./banners/entities/banner.entity");
 const project_entity_1 = require("./projects/entities/project.entity");
 const category_entity_1 = require("./categories/entities/category.entity");
 const media_entity_1 = require("./media/entities/media.entity");
+const country_entity_1 = require("./countries/entities/country.entity");
+const continent_entity_1 = require("./continents/entities/continent.entity");
+const campaign_entity_1 = require("./campaigns/entities/campaign.entity");
+const donation_entity_1 = require("./donations/entities/donation.entity");
 const traffic_interceptor_1 = require("./common/interceptors/traffic.interceptor");
 const logger_service_1 = require("./common/services/logger.service");
 const monitoring_service_1 = require("./common/services/monitoring.service");
-const country_entity_1 = require("./countries/entities/country.entity");
-const countries_module_1 = require("./countries/countries.module");
-const campaigns_module_1 = require("./campaigns/campaigns.module");
-const continent_entity_1 = require("./continents/entities/continent.entity");
-const continents_module_1 = require("./continents/continents.module");
-const campaign_entity_1 = require("./campaigns/entities/campaign.entity");
-const donation_entity_1 = require("./donations/entities/donation.entity");
-const donations_module_1 = require("./donations/donations.module");
-const myfatoora_module_1 = require("./myfatoora/myfatoora.module");
-const stripe_module_1 = require("./stripe/stripe.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -66,6 +66,9 @@ exports.AppModule = AppModule = __decorate([
                         donation_entity_1.Donation,
                     ],
                     synchronize: config.isDevelopment,
+                    ssl: {
+                        rejectUnauthorized: false,
+                    },
                 }),
                 inject: [config_service_1.AppConfigService],
             }),
