@@ -68,9 +68,9 @@ import { MonitoringService } from './common/services/monitoring.service';
         synchronize: config.isDevelopment, // Auto-sync entities (only in development)
 
         // Optional: SSL configuration if required by the host (e.g., Clever Cloud)
-        ssl: {
-          rejectUnauthorized: false, // Accept self-signed certificates
-        },
+        // ssl: {
+        //   rejectUnauthorized: false, // Accept self-signed certificates
+        // },
       }),
       inject: [AppConfigService], // Inject AppConfigService to access environment configs
     }),
