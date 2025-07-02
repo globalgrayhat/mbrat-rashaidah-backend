@@ -10,8 +10,7 @@ import { UpdateDonationDto } from './dto/update-donation.dto';
 import { Donation } from './entities/donation.entity';
 import { Project } from '../projects/entities/project.entity';
 import { User } from '../user/entities/user.entity';
-import { StripeService } from '../stripe/stripe.service';
-import { MyFatooraService } from '../myfatoora/myfatoora.service';
+
 import { PaymentResult } from '../common/interfaces/payment-service.interface';
 import {
   StripeEvent,
@@ -30,8 +29,8 @@ export class DonationsService {
     private readonly projectRepo: Repository<Project>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-    private readonly stripe: StripeService,
-    private readonly myfatoora: MyFatooraService,
+    // private readonly stripe: StripeService,
+    // private readonly myfatoora: MyFatooraService,
   ) {}
 
   // Create a donation and initiate payment
@@ -78,35 +77,35 @@ export class DonationsService {
       // Initialize payment based on selected gateway
       let paymentResult: PaymentResult;
 
-      if (donation.paymentMethod === PaymentMethodEnum.STRIPE) {
-        paymentResult = await this.stripe.createPayment({
-          amount: createDonationDto.amount,
-          currency: createDonationDto.currency,
-          donationId: donation.id,
-          projectTitle: project.title,
-        });
-      } else if (donation.paymentMethod === PaymentMethodEnum.MYFATOORA) {
-        paymentResult = await this.myfatoora.createPayment({
-          amount: createDonationDto.amount,
-          currency: createDonationDto.currency,
-          donationId: donation.id,
-          projectTitle: project.title,
-        });
-      } else {
-        throw new NotAcceptableException('Invalid payment method');
-      }
+      // if (donation.paymentMethod === PaymentMethodEnum.STRIPE) {
+      //   paymentResult = await this.stripe.createPayment({
+      //     amount: createDonationDto.amount,
+      //     currency: createDonationDto.currency,
+      //     donationId: donation.id,
+      //     projectTitle: project.title,
+      //   });
+      // } else if (donation.paymentMethod === PaymentMethodEnum.MYFATOORA) {
+      //   paymentResult = await this.myfatoora.createPayment({
+      //     amount: createDonationDto.amount,
+      //     currency: createDonationDto.currency,
+      //     donationId: donation.id,
+      //     projectTitle: project.title,
+      //   });
+      // } else {
+      //   throw new NotAcceptableException('Invalid payment method');
+      // }
 
       // Update donation with payment info
-      donation.paymentId = paymentResult.id;
-      donation.paymentDetails = paymentResult;
-      await queryRunner.manager.save(donation);
+      // donation.paymentId = paymentResult.id;
+      // donation.paymentDetails = paymentResult;
+      // await queryRunner.manager.save(donation);
 
-      await queryRunner.commitTransaction();
+      // await queryRunner.commitTransaction();
 
-      return {
-        donationId: donation.id,
-        paymentUrl: paymentResult.url,
-      };
+      // return {
+      //   donationId: donation.id,
+      //   paymentUrl: paymentResult.url,
+      // };
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;

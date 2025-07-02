@@ -23,8 +23,6 @@ import { CountriesModule } from './countries/countries.module';
 import { ContinentsModule } from './continents/continents.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { DonationsModule } from './donations/donations.module';
-import { MyFatooraModule } from './myfatoora/myfatoora.module';
-import { StripeModule } from './stripe/stripe.module';
 
 // Database entity imports
 import { User } from './user/entities/user.entity';
@@ -89,8 +87,6 @@ import { MonitoringService } from './common/services/monitoring.service';
     ContinentsModule,
     CampaignsModule,
     DonationsModule,
-    MyFatooraModule,
-    StripeModule,
   ],
 
   // Main app controller
