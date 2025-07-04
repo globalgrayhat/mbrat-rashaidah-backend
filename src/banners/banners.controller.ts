@@ -30,13 +30,11 @@ export class BannersController {
   }
 
   @Get()
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   findAll() {
     return this.bannersService.findAll();
   }
 
   @Get(':id')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   findOne(@Param('id') id: string) {
     return this.bannersService.findOne(id);
   }
