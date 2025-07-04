@@ -44,7 +44,7 @@ export class AppConfigService {
 
     // Compose default domains
     const base = `https://${this.baseDomain}`;
-    const api = `https://${this.apiDomain}`;
+    const api = `http://${this.apiDomain}`;
 
     // Add base domain if it's not already included
     if (!origins.includes(base)) {

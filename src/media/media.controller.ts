@@ -1,5 +1,3 @@
-// [FIXED 2025-06-04] Media Controller – Unified Upload Implementation
-
 import {
   Controller,
   Get,
@@ -28,6 +26,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Controller('media')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -41,7 +41,7 @@ export class MediaController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // Max 10MB
           new MimeTypesValidator({
             types: [
               'image/png',
@@ -56,23 +56,25 @@ export class MediaController {
     )
     file: Express.Multer.File,
   ) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
+    if (!file) throw new BadRequestException('No file uploaded');
 
-    // Convert file to Base64
-    const base64Data = file.buffer.toString('base64');
+    const uploadDir = path.join(process.cwd(), 'uploads');
+    fs.mkdirSync(uploadDir, { recursive: true });
 
-    // Create media DTO
+    const uniqueFileName = file.originalname; // You can add UUID if needed
+    const filePath = path.join(uploadDir, uniqueFileName);
+
+    fs.writeFileSync(filePath, file.buffer);
+
     const createMediaDto: CreateMediaDto = {
       name: file.originalname,
-      data: base64Data,
+      path: `uploads/${uniqueFileName}`,
       mimeType: file.mimetype,
       size: file.size,
       type: this.getMediaTypeFromMimeType(file.mimetype),
     };
 
-    return await this.mediaService.create(createMediaDto);
+    return this.mediaService.create(createMediaDto);
   }
 
   @Get()
@@ -81,8 +83,8 @@ export class MediaController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return await this.mediaService.findOne(id);
+  findOne(@Param('id') id: string) {
+    return this.mediaService.findOne(id);
   }
 
   @Get(':id/data')
@@ -91,16 +93,20 @@ export class MediaController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
     const media = await this.mediaService.findOne(id);
+    const filePath = path.join(process.cwd(), media.path);
 
-    // Set appropriate headers
+    if (!fs.existsSync(filePath)) {
+      throw new BadRequestException('File not found on server');
+    }
+
+    const stream = fs.createReadStream(filePath);
+
     res.set({
       'Content-Type': media.mimeType,
       'Content-Length': media.size.toString(),
     });
 
-    // Convert Base64 to Buffer and return as stream
-    const buffer = Buffer.from(media.data, 'base64');
-    return new StreamableFile(buffer);
+    return new StreamableFile(stream);
   }
 
   @Patch(':id')
@@ -116,14 +122,9 @@ export class MediaController {
   }
 
   private getMediaTypeFromMimeType(mimeType: string): MediaType {
-    if (mimeType.startsWith('image/')) {
-      return MediaType.IMAGE;
-    } else if (mimeType.startsWith('video/')) {
-      return MediaType.VIDEO;
-    } else if (mimeType.startsWith('audio/')) {
-      return MediaType.AUDIO;
-    } else {
-      return MediaType.DOCUMENT;
-    }
+    if (mimeType.startsWith('image/')) return MediaType.IMAGE;
+    if (mimeType.startsWith('video/')) return MediaType.VIDEO;
+    if (mimeType.startsWith('audio/')) return MediaType.AUDIO;
+    return MediaType.DOCUMENT;
   }
 }

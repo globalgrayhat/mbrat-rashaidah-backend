@@ -34,8 +34,8 @@ export class Media {
   /**
    * Base64-encoded file data
    */
-  @Column('longtext')
-  data: string;
+  @Column({ length: 500 })
+  path: string;
 
   /**
    * MIME type of the media (e.g., image/png)

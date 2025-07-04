@@ -32,9 +32,7 @@ export class MediaService {
 
   async findOne(id: string): Promise<Media> {
     const media = await this.mediaRepository.findOne({ where: { id } });
-    if (!media) {
-      throw new NotFoundException(`Media with ID ${id} not found`);
-    }
+    if (!media) throw new NotFoundException(`Media with ID ${id} not found`);
     return media;
   }
 
@@ -48,4 +46,4 @@ export class MediaService {
     const media = await this.findOne(id);
     await this.mediaRepository.remove(media);
   }
-} 
+}

@@ -6,48 +6,60 @@ import { AppConfigService } from './config/config.service';
 import { TrafficInterceptor } from './common/interceptors/traffic.interceptor';
 import helmet from 'helmet';
 import * as compression from 'compression';
-
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Create the NestJS application with Express platform (for static files)
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Get config service
+  // Get AppConfigService instance from DI container
   const configService = app.get(AppConfigService);
   const isDev = configService.isDevelopment;
 
-  // Enable CORS with allowed origins from config
+  /* ---------- static files ---------- */
+  // ②   <project root>/uploads  ⤏  http://host:port/uploads/*
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads', // URL prefix
+    setHeaders(res) {
+      // good practice: correct MIME type is set automatically by Express
+      // optionally add caching headers here
+    },
+  });
+
+  // Enable CORS for development or specific origins in production
   app.enableCors({
     origin: isDev ? true : configService.allowedOrigins,
     credentials: true,
   });
 
-  // Security middleware
-  app.use(helmet()); // This should now be callable
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  // Apply security headers using helmet
+  app.use(helmet());
+
+  // Enable GZIP compression for responses
   app.use(compression());
 
-  // Global validation pipe
+  // Enable global validation pipe for DTO validation/transformation
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      forbidNonWhitelisted: true,
+      whitelist: true, // Remove properties not in DTO
+      transform: true, // Automatically transform payloads to DTO instances
+      forbidNonWhitelisted: true, // Throw error if unknown fields exist
     }),
   );
-  // Global traffic interceptor
+
+  // Apply global traffic interceptor (for logging, metrics, etc.)
   app.useGlobalInterceptors(app.get(TrafficInterceptor));
 
-  // Start the application on configured port
+  // Start the application
   await app.listen(configService.port);
 
-  // In development mode, allow all origins for easier testing and log a notice
+  // Development-specific logs
   if (isDev) {
-    console.log('🧪 Development mode: CORS enabled for any origin');
+    console.log('🧪 Development mode: CORS enabled for all origins');
   }
 
-  // Determine the protocol based on the environment
+  // Log final API URL
   const protocol = isDev ? 'http' : 'https';
-
-  // Log application startup message with full API URL
   console.log(
     `🚀 ${configService.appName} is running at ${protocol}://${configService.apiDomain}:${configService.port}`,
   );

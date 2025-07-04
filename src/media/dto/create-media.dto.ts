@@ -14,7 +14,7 @@ export class CreateMediaDto {
   name: string;
 
   @IsString()
-  data: string;
+  path: string;
 
   @IsString()
   mimeType: string;
