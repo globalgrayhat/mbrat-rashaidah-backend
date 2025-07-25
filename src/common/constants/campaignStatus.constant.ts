@@ -1,5 +1,6 @@
-export enum CampaignStatusEnum {
-    ACTIVE = 'active',
-    COMPLETED = 'completed',
-    INACTIVE = 'inactive',
-  }
+export enum CampaignStatus {
+  ACTIVE = 'active',
+  COMPLETED = 'completed',
+  INACTIVE = 'inactive',
+  DRAFT = 'draft',
+}

@@ -22,6 +22,7 @@ import { MediaModule } from './media/media.module';
 import { CountriesModule } from './countries/countries.module';
 import { ContinentsModule } from './continents/continents.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
+import { DonorModule } from './donor/donor.module';
 import { DonationsModule } from './donations/donations.module';
 
 // Database entity imports
@@ -33,17 +34,21 @@ import { Media } from './media/entities/media.entity';
 import { Country } from './countries/entities/country.entity';
 import { Continent } from './continents/entities/continent.entity';
 import { Campaign } from './campaigns/entities/campaign.entity';
+import { Donor } from './donor/entities/donor.entity';
 import { Donation } from './donations/entities/donation.entity';
 
 // Common services and interceptors
 import { TrafficInterceptor } from './common/interceptors/traffic.interceptor';
 import { CustomLogger } from './common/services/logger.service';
 import { MonitoringService } from './common/services/monitoring.service';
+import { ProjectExistsPipe } from './common/pipes/projectExists.pipe';
+import { CampaignExistsPipe } from './common/pipes/campaignExists.pipe';
+import { DonorExistsPipe } from './common/pipes/donorExists.pipe';
+import { DonationExistsPipe } from './common/pipes/donationExists.pipe';
 
 @Module({
   imports: [
     AppConfigModule,
-
     // Database connection setup using TypeORM and async config loading
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
@@ -63,6 +68,7 @@ import { MonitoringService } from './common/services/monitoring.service';
           Country,
           Continent,
           Campaign,
+          Donor,
           Donation,
         ],
         synchronize: config.isDevelopment, // Auto-sync entities (only in development)
@@ -86,6 +92,7 @@ import { MonitoringService } from './common/services/monitoring.service';
     CountriesModule,
     ContinentsModule,
     CampaignsModule,
+    DonorModule,
     DonationsModule,
   ],
 
@@ -93,6 +100,15 @@ import { MonitoringService } from './common/services/monitoring.service';
   controllers: [AppController],
 
   // Global providers (services, interceptors, logging)
-  providers: [AppService, TrafficInterceptor, CustomLogger, MonitoringService],
+  providers: [
+    AppService,
+    TrafficInterceptor,
+    CustomLogger,
+    MonitoringService,
+    ProjectExistsPipe,
+    CampaignExistsPipe,
+    DonorExistsPipe,
+    DonationExistsPipe,
+  ],
 })
 export class AppModule {}

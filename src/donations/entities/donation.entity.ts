@@ -6,15 +6,17 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToOne,
 } from 'typeorm';
 
 import { Project } from '../../projects/entities/project.entity';
-import { User } from '../../user/entities/user.entity';
+import { Campaign } from '../../campaigns/entities/campaign.entity'; // Import Campaign
+import { Donor } from '../../donor/entities/donor.entity'; // Import Donor
 import { DonationStatusEnum } from '../../common/constants/donationStatus.constant';
 import { PaymentMethodEnum } from '../../common/constants/payment.constant';
-
+import { Payment } from '../../payment/entities/payment.entity';
 /**
- * Represents a donation record made by a user towards a project
+ * Represents a donation record made by a donor towards a project or campaign
  */
 @Entity('donations')
 export class Donation {
@@ -74,30 +76,65 @@ export class Donation {
   paidAt?: Date;
 
   /**
-   * Associated project for this donation
+   * Associated project for this donation (nullable)
    */
-  @ManyToOne(() => Project, { eager: true })
+  @ManyToOne(() => Project, (project) => project.donations, { nullable: true })
   @JoinColumn({ name: 'projectId' })
-  project: Project;
+  project?: Project;
 
   /**
-   * Foreign key for project
+   * Foreign key for project (nullable)
    */
-  @Column('uuid')
-  projectId: string;
+  @Column('uuid', { nullable: true })
+  projectId?: string;
+
+  /**
+   * Associated campaign for this donation (nullable)
+   */
+  @ManyToOne(() => Campaign, (campaign) => campaign.donations, {
+    nullable: true,
+  })
+  @JoinColumn({ name: 'campaignId' })
+  campaign?: Campaign;
+
+  /**
+   * Foreign key for campaign (nullable)
+   */
+  @Column('uuid', { nullable: true })
+  campaignId?: string;
 
   /**
    * Donor who made the donation (optional)
    */
-  @ManyToOne(() => User, { nullable: true, eager: true })
+  @ManyToOne(() => Donor, (donor) => donor.donations, {
+    nullable: true,
+    eager: true,
+  })
   @JoinColumn({ name: 'donorId' })
-  donor?: User;
+  donor?: Donor;
 
   /**
-   * Foreign key for donor user
+   /**
+    * Payment associated with this donation (optional)
+    */
+  @OneToOne(() => Payment, (payment) => payment.donation, {
+    nullable: true,
+    eager: true,
+  })
+  @JoinColumn({ name: 'paymentId' })
+  payment?: Payment;
+
+  /**
+   * Foreign key for donor user (optional, can be null for anonymous)
    */
   @Column('uuid', { nullable: true })
   donorId?: string;
+
+  /**
+   * Email of the anonymous donor (if provided and donor is anonymous)
+   */
+  @Column({ nullable: true })
+  anonymousEmail?: string;
 
   /**
    * Timestamp when the donation record was created

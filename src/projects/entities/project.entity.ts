@@ -8,6 +8,7 @@ import {
   JoinColumn,
   ManyToMany,
   JoinTable,
+  OneToMany, // Import OneToMany
 } from 'typeorm';
 
 import { Category } from '../../categories/entities/category.entity';
@@ -16,6 +17,7 @@ import { Continent } from '../../continents/entities/continent.entity';
 import { Media } from '../../media/entities/media.entity';
 import { User } from '../../user/entities/user.entity';
 import { ProjectStatus } from '../../common/constants/project.constant';
+import { Donation } from '../../donations/entities/donation.entity'; // Import Donation
 
 /**
  * Represents a charitable project in the system
@@ -73,7 +75,7 @@ export class Project {
   /**
    * Current amount raised
    */
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
   currentAmount: number;
 
   /**
@@ -202,4 +204,10 @@ export class Project {
    */
   @Column('uuid', { nullable: true })
   createdById?: string;
+
+  /**
+   * Donations associated with this project
+   */
+  @OneToMany(() => Donation, (donation) => donation.project)
+  donations: Donation[];
 }

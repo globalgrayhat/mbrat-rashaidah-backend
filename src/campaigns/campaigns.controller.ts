@@ -1,85 +1,77 @@
 import {
-  Body,
   Controller,
-  DefaultValuePipe,
-  Delete,
   Get,
-  Param,
-  ParseEnumPipe,
-  ParseIntPipe,
-  ParseUUIDPipe,
   Post,
-  Put,
-  Query,
-  Req,
+  Delete,
+  Body,
+  Param,
   UseGuards,
-  UsePipes,
+  Patch,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { CampaignsService } from './campaigns.service';
 import { CreateCampaignDto } from './dto/createCampaignDto';
-import { campaignExistsPipe } from 'src/common/pipes/campaignExists.pipe';
 import { UpdateCampaignDto } from './dto/UpdateCampaignDto';
-import { CampaignPurposeEnum } from '../common/constants/campaignPurpose.constant'; 
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
-
+import { CampaignStatus } from '../common/constants/campaignStatus.constant';
+import { CampaignExistsPipe } from '../common/pipes/campaignExists.pipe'; // Need to create this pipe
 
 @Controller('campaigns')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CampaignsController {
   constructor(private readonly campaignsService: CampaignsService) {}
 
-  @Get()
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  getCampaigns(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query(
-      'purpose',
-      new ParseEnumPipe(CampaignPurposeEnum, {
-        optional: true,
-      }),
-    )
-    purpose: string,
-    @Query('search') search: string,
-  ) {
-    const CAMPAIGNS_PER_PAGE = 5;
-    return this.campaignsService.getCampaigns(
-      search,
-      purpose,
-      page,
-      CAMPAIGNS_PER_PAGE,
-    );
-  }
-
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  addCampaign(@Req() req, @Body() createCampaignDto: CreateCampaignDto) {
-    const userId: string = req.user.userId;
-    return this.campaignsService.addCampaign(createCampaignDto, userId);
+  create(@Body() createCampaignDto: CreateCampaignDto) {
+    return this.campaignsService.create(createCampaignDto);
+  }
+
+  @Get()
+  findAll() {
+    return this.campaignsService.findAll();
   }
 
   @Get(':id')
-  @UsePipes(campaignExistsPipe)
-  getCampaign(@Param('id', ParseUUIDPipe) id: string) {
-    return this.campaignsService.getCampaign(id);
+  findOne(@Param('id', ParseUUIDPipe, CampaignExistsPipe) id: string) {
+    return this.campaignsService.findOne(id);
   }
 
-  @Put(':id')
+  @Patch(':id')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  @UsePipes(campaignExistsPipe)
-  editCampaign(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() UpdateCampaignDto: UpdateCampaignDto,
+  update(
+    @Param('id', ParseUUIDPipe, CampaignExistsPipe) id: string,
+    @Body() updateCampaignDto: UpdateCampaignDto,
   ) {
-    return this.campaignsService.editCampaign(id, UpdateCampaignDto);
+    return this.campaignsService.update(id, updateCampaignDto);
   }
 
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @Delete(':id')
-  @UsePipes(campaignExistsPipe)
-  deleteCampaign(@Param('id', ParseUUIDPipe) id: string) {
-    return this.campaignsService.deleteCampaign(id);
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  remove(@Param('id', ParseUUIDPipe, CampaignExistsPipe) id: string) {
+    return this.campaignsService.remove(id);
+  }
+
+  @Get('category/:categoryId')
+  findByCategory(@Param('categoryId', ParseUUIDPipe) categoryId: string) {
+    return this.campaignsService.findByCategory(categoryId);
+  }
+
+  @Get('status/:status')
+  findCampaignList(@Param('status') status: CampaignStatus) {
+    return this.campaignsService.findCampaignList(status);
+  }
+
+  @Get('details/:campaignId')
+  findCampaignDetails(@Param('campaignId', ParseUUIDPipe) campaignId: string) {
+    return this.campaignsService.findCampaignDetails(campaignId);
+  }
+
+  @Get('stats/summary')
+  getCampaignStats() {
+    return this.campaignsService.getCampaignStats();
   }
 }

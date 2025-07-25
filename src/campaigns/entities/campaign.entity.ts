@@ -6,15 +6,19 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  ManyToMany,
+  JoinTable,
+  OneToMany,
 } from 'typeorm';
 
-import { Project } from '../../projects/entities/project.entity';
+import { Category } from '../../categories/entities/category.entity';
+import { Media } from '../../media/entities/media.entity';
 import { User } from '../../user/entities/user.entity';
-import { CampaignPurposeEnum } from '../../common/constants/campaignPurpose.constant';
-import { CampaignStatusEnum } from '../../common/constants/campaignStatus.constant';
+import { CampaignStatus } from '../../common/constants/campaignStatus.constant';
+import { Donation } from '../../donations/entities/donation.entity'; // Import Donation
 
 /**
- * Represents a fundraising campaign linked to a project or managed by an official
+ * Represents a charitable campaign in the system
  */
 @Entity('campaigns')
 export class Campaign {
@@ -25,89 +29,151 @@ export class Campaign {
   id: string;
 
   /**
-   * Unique campaign name
+   * Title of the campaign
+   */
+  @Column({ length: 255 })
+  title: string;
+
+  /**
+   * URL-friendly unique slug for the campaign
    */
   @Column({ unique: true, length: 255 })
-  name: string;
+  slug: string;
 
   /**
    * Detailed description of the campaign
    */
-  @Column('text', { nullable: true })
-  description?: string;
+  @Column('text')
+  description: string;
 
   /**
-   * Total amount required for the campaign
+   * Start date and time of the campaign
+   */
+  @Column({ type: 'timestamp' })
+  startDate: Date;
+
+  /**
+   * Optional end date and time of the campaign
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  endDate?: Date;
+
+  /**
+   * Target fundraising amount
    */
   @Column('decimal', { precision: 10, scale: 2 })
-  amountRequired: number;
+  targetAmount: number;
 
   /**
-   * Amount raised so far
+   * Current amount raised
    */
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
-  amountRaised: number;
+  currentAmount: number;
 
   /**
-   * Remaining amount left to raise
+   * Category associated with this campaign
    */
-  @Column('decimal', { precision: 10, scale: 2, default: 0 })
-  amountLeft: number;
+  @ManyToOne(() => Category, { eager: true })
+  @JoinColumn({ name: 'categoryId' })
+  category: Category;
 
   /**
-   * Purpose category of the campaign
+   * Foreign key for category
    */
-  @Column({
-    type: 'enum',
-    enum: CampaignPurposeEnum,
+  @Column('uuid')
+  categoryId: string;
+
+  /**
+   * Media assets related to this campaign
+   */
+  @ManyToMany(() => Media, (media) => media.campaigns)
+  @JoinTable({
+    name: 'campaign_media',
+    joinColumn: { name: 'campaignId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'mediaId', referencedColumnName: 'id' },
   })
-  purpose: CampaignPurposeEnum;
+  media: Media[];
 
   /**
    * Current status of the campaign
    */
   @Column({
     type: 'enum',
-    enum: CampaignStatusEnum,
-    default: CampaignStatusEnum.ACTIVE,
+    enum: CampaignStatus,
+    default: CampaignStatus.DRAFT,
   })
-  campaignStatus: CampaignStatusEnum;
+  status: CampaignStatus;
 
   /**
-   * Official user responsible for the campaign
+   * Flag indicating if the campaign is active
    */
-  @ManyToOne(() => User, { nullable: false, eager: true })
-  @JoinColumn({ name: 'officialId' })
-  official: User;
+  @Column({ default: true })
+  isActive: boolean;
 
   /**
-   * Foreign key for the official user
+   * Number of times the campaign page has been viewed
    */
-  @Column('uuid')
-  officialId: string;
+  @Column({ default: 0 })
+  viewCount: number;
 
   /**
-   * Optional related project for the campaign
+   * Total number of donations made
    */
-  @ManyToOne(() => Project, { nullable: true, eager: true })
-  @JoinColumn({ name: 'projectId' })
-  project?: Project;
+  @Column({ default: 0 })
+  donationCount: number;
 
   /**
-   * Foreign key for the related project
+   * Flag to show or hide donation functionality
    */
-  @Column('uuid', { nullable: true })
-  projectId?: string;
+  @Column({ default: true })
+  isDonationActive: boolean;
 
   /**
-   * Timestamp when the campaign was created
+   * Flag to show or hide progress bar
+   */
+  @Column({ default: true })
+  isProgressActive: boolean;
+
+  /**
+   * Flag to show or hide target amount
+   */
+  @Column({ default: true })
+  isTargetAmountActive: boolean;
+
+  /**
+   * Optional specific donation goal
+   */
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  donationGoal?: number;
+
+  /**
+   * Timestamp when the campaign record was created
    */
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
   /**
-   * Timestamp when the campaign was last updated
+   * Timestamp when the campaign record was last updated
    */
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
+
+  /**
+   * User who created the campaign (optional)
+   */
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'createdById' })
+  createdBy?: User;
+
+  /**
+   * Foreign key for the creator user
+   */
+  @Column('uuid', { nullable: true })
+  createdById?: string;
+
+  /**
+   * Donations associated with this campaign
+   */
+  @OneToMany(() => Donation, (donation) => donation.campaign)
+  donations: Donation[];
 }

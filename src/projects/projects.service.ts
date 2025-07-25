@@ -13,6 +13,7 @@ import { Country } from '../countries/entities/country.entity';
 import { Continent } from '../continents/entities/continent.entity';
 import { Media } from '../media/entities/media.entity';
 import { ProjectStatus } from '../common/constants/project.constant';
+// import { Donation } from '../donations/entities/donation.entity'; // Import Donation
 
 @Injectable()
 export class ProjectsService {
@@ -34,6 +35,7 @@ export class ProjectsService {
     id: string,
     entityName: string,
   ): Promise<T> {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const entity = await repo.findOne({ where: { id: id as any } });
     if (!entity) {
       throw new NotFoundException(`${entityName} with ID "${id}" not found.`);
@@ -105,16 +107,18 @@ export class ProjectsService {
       startDate: createProjectDto.startDate,
       endDate: createProjectDto.endDate,
       targetAmount: createProjectDto.targetAmount,
-      currentAmount: createProjectDto.currentAmount,
+      currentAmount: createProjectDto.currentAmount ?? 0, // Ensure currentAmount has a default
       categoryId,
       countryId,
       continentId,
       status: ProjectStatus.DRAFT,
       isActive: createProjectDto.isActive ?? true,
-      isDonationActive: createProjectDto.isDonationActive ?? false,
-      isProgressActive: createProjectDto.isProgressActive ?? false,
-      isTargetAmountActive: createProjectDto.isTargetAmountActive ?? false,
+      isDonationActive: createProjectDto.isDonationActive ?? true, // Default to true
+      isProgressActive: createProjectDto.isProgressActive ?? true, // Default to true
+      isTargetAmountActive: createProjectDto.isTargetAmountActive ?? true, // Default to true
       donationGoal: createProjectDto.donationGoal,
+      donationCount: 0, // Initialize donationCount
+      viewCount: 0, // Initialize viewCount
       // viewCount, donationCount, createdById, etc. remain default/null
     });
 
@@ -214,7 +218,13 @@ export class ProjectsService {
     try {
       return await this.projectRepository.save(project);
     } catch (err) {
-      if (err instanceof QueryFailedError && (err as any).code === '23505') {
+      if (
+        err instanceof QueryFailedError &&
+        typeof err === 'object' &&
+        err !== null &&
+        typeof (err as { code?: unknown }).code === 'string' &&
+        (err as unknown as { code: string }).code === '23505'
+      ) {
         throw new ConflictException(
           `Project slug "${updateProjectDto.slug}" already exists.`,
         );

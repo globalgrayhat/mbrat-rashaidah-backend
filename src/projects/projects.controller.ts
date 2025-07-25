@@ -7,6 +7,7 @@ import {
   Param,
   UseGuards,
   Patch,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -16,6 +17,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
 import { ProjectStatus } from '../common/constants/project.constant';
+import { ProjectExistsPipe } from '../common/pipes/projectExists.pipe'; // Import the new pipe
 
 @Controller('projects')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -34,19 +36,24 @@ export class ProjectsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe, ProjectExistsPipe) id: string) {
+    // Add ProjectExistsPipe
     return this.projectsService.findOne(id);
   }
 
   @Patch(':id')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto) {
+  update(
+    @Param('id', ParseUUIDPipe, ProjectExistsPipe) id: string, // Add ProjectExistsPipe
+    @Body() updateProjectDto: UpdateProjectDto,
+  ) {
     return this.projectsService.update(id, updateProjectDto);
   }
 
   @Delete(':id')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseUUIDPipe, ProjectExistsPipe) id: string) {
+    // Add ProjectExistsPipe
     return this.projectsService.remove(id);
   }
 
@@ -66,7 +73,7 @@ export class ProjectsController {
   }
 
   @Get('details/:projectId')
-  findProjectDetails(@Param('projectId') projectId: string) {
+  findProjectDetails(@Param('projectId', ParseUUIDPipe) projectId: string) {
     return this.projectsService.findProjectDetails(projectId);
   }
 

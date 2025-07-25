@@ -13,7 +13,7 @@ import { User } from '../../user/entities/user.entity';
 import { Project } from '../../projects/entities/project.entity';
 import { Banner } from '../../banners/entities/banner.entity';
 import { MediaType } from '../../common/constants/media.constant';
-
+import { Campaign } from '../../campaigns/entities/campaign.entity';
 /**
  * Represents a media asset stored in the system
  */
@@ -70,6 +70,12 @@ export class Media {
    */
   @ManyToMany(() => Project, (project) => project.media)
   projects: Project[];
+
+  /**
+   * Projects associated with this media
+   */
+  @ManyToMany(() => Campaign, (campaign) => campaign.media)
+  campaigns: Campaign[];
 
   /**
    * Banner associated with this media (optional)
