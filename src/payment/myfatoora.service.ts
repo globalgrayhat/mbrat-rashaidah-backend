@@ -100,9 +100,6 @@ export class MyFatooraService implements PaymentService {
       paymentMethodId,
     } = payload;
 
-    // Determine the endpoint based on the presence of paymentMethodId.
-    const endpoint = paymentMethodId ? 'ExecutePayment' : 'SendPayment';
-
     const requestBody = {
       ...(paymentMethodId && { PaymentMethodId: paymentMethodId }), // Add the payment method if it exists.
       CustomerName: customerName,
@@ -119,9 +116,9 @@ export class MyFatooraService implements PaymentService {
 
     const data = await this.request<MyFatoorahResponseData>(
       'post',
-      endpoint,
+      'SendPayment',
       requestBody,
-      `Create MyFatoorah payment via ${endpoint}`,
+      `Create MyFatoorah payment via SendPayment`,
     );
 
     if (!data.PaymentURL || !data.InvoiceId) {
