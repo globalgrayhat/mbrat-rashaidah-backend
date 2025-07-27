@@ -38,14 +38,6 @@ export class Donation {
   })
   status: DonationStatusEnum;
 
-  @Column({
-    length: 255,
-    nullable: true,
-    comment:
-      'Transaction ID from the payment gateway (e.g., MyFatoorah InvoiceId)',
-  })
-  paymentId?: string;
-
   @Column('json', {
     nullable: true,
     comment: 'Raw response from payment gateway on creation',
@@ -62,6 +54,9 @@ export class Donation {
   @ManyToOne(() => Payment, { nullable: true })
   @JoinColumn({ name: 'paymentId' })
   payment?: Payment;
+
+  @Column('uuid', { nullable: true })
+  paymentId?: string;
 
   @Column({ type: 'timestamp', nullable: true })
   paidAt?: Date;

@@ -101,17 +101,17 @@ export class MyFatooraService implements PaymentService {
     } = payload;
 
     const requestBody = {
-      ...(paymentMethodId && { PaymentMethodId: paymentMethodId }), // Add the payment method if it exists.
+      ...(paymentMethodId && { InvoicePaymentMethods: paymentMethodId }),
       CustomerName: customerName,
-      NotificationOption: 'LNK', // Link Only.
+      NotificationOption: 'LNK',
       InvoiceValue: amount,
       CallBackUrl: this.configService.myFatoorahCallbackUrl,
       ErrorUrl: this.configService.myFatoorahErrorkUrl,
-      Language: 'ar', // 'en' or 'ar'
+      Language: 'AR',
       CustomerEmail: customerEmail,
       CurrencyIso: currency,
       Description: description,
-      ClientReferenceId: donationId, // A reference ID from your own system.
+      ClientReferenceId: donationId,
     };
 
     const data = await this.request<MyFatoorahResponseData>(

@@ -41,14 +41,13 @@ import { Donation } from './donations/entities/donation.entity';
 import { TrafficInterceptor } from './common/interceptors/traffic.interceptor';
 import { CustomLogger } from './common/services/logger.service';
 import { MonitoringService } from './common/services/monitoring.service';
-import { ProjectExistsPipe } from './common/pipes/projectExists.pipe';
-import { CampaignExistsPipe } from './common/pipes/campaignExists.pipe';
-import { DonorExistsPipe } from './common/pipes/donorExists.pipe';
-import { DonationExistsPipe } from './common/pipes/donationExists.pipe';
+import { CommonPipesModule } from './common/pipes/pipes.module';
+import { Payment } from './payment/entities/payment.entity';
 
 @Module({
   imports: [
     AppConfigModule,
+    CommonPipesModule,
     // Database connection setup using TypeORM and async config loading
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
@@ -70,8 +69,10 @@ import { DonationExistsPipe } from './common/pipes/donationExists.pipe';
           Campaign,
           Donor,
           Donation,
+          Payment,
         ],
         synchronize: config.isDevelopment, // Auto-sync entities (only in development)
+        // dropSchema: true,
 
         // Optional: SSL configuration if required by the host (e.g., Clever Cloud)
         // ssl: {
@@ -100,15 +101,6 @@ import { DonationExistsPipe } from './common/pipes/donationExists.pipe';
   controllers: [AppController],
 
   // Global providers (services, interceptors, logging)
-  providers: [
-    AppService,
-    TrafficInterceptor,
-    CustomLogger,
-    MonitoringService,
-    ProjectExistsPipe,
-    CampaignExistsPipe,
-    DonorExistsPipe,
-    DonationExistsPipe,
-  ],
+  providers: [AppService, TrafficInterceptor, CustomLogger, MonitoringService],
 })
 export class AppModule {}

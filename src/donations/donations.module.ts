@@ -10,11 +10,22 @@ import { Project } from '../projects/entities/project.entity';
 import { ProjectsModule } from '../projects/projects.module';
 import { Payment } from '../payment/entities/payment.entity';
 import { MyFatooraService } from '../payment/myfatoora.service';
-
+import { Donor } from '../donor/entities/donor.entity';
+import { DonorModule } from '../donor/donor.module';
+import { AppConfigModule } from '../config/config.module';
 @Module({
   imports: [
     ProjectsModule,
-    TypeOrmModule.forFeature([Donation, Campaign, User, Project, Payment]),
+    DonorModule,
+    TypeOrmModule.forFeature([
+      Donation,
+      Campaign,
+      User,
+      Project,
+      Payment,
+      Donor,
+    ]),
+    AppConfigModule,
   ],
   controllers: [DonationsController],
   providers: [DonationsService, MyFatooraService],
