@@ -1,7 +1,17 @@
 export enum DonationStatusEnum {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  SUCCESSFUL = 'SUCCESSFUL',
-  CANCELLED = 'CANCELLED',
+  PENDING = 'pending',
+  PAID = 'paid',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  SUCCESSFUL = 'successful',
+  CANCELLED = 'cancelled',
+}
+
+export enum DonationStatus {
+  PENDING = 'pending',
+  PAID = 'paid',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  SUCCESSFUL = 'successful',
+  CANCELLED = 'cancelled',
 }

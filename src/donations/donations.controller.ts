@@ -7,7 +7,6 @@ import {
   Delete,
   UseGuards,
   ParseUUIDPipe,
-  BadRequestException,
   Patch,
 } from '@nestjs/common';
 import { DonationsService } from './donations.service';
@@ -17,10 +16,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
-import { PaymentMethodEnum } from '../common/constants/payment.constant';
-import {
-  MyFatooraWebhookEvent, // Renamed for clarity
-} from '../common/interfaces/payment-service.interface';
+
 import { DonorsService } from '../donor/donor.service'; // Import DonorsService
 import { CreateDonorDto } from '../donor/dto/create-donor.dto';
 import { UpdateDonorDto } from '../donor/dto/update-donor.dto';
@@ -38,10 +34,7 @@ export class DonationsController {
   ) {}
 
   @Post()
-  // No specific project/campaign ID in path, as it's in DTO.
-  // We apply the custom validation pipe at the DTO level.
   async createDonation(@Body() createDonationDto: CreateDonationDto) {
-    // The custom validator IsValidDonationTarget in CreateDonationDto ensures only one ID is set
     return this.donationsService.create(createDonationDto);
   }
 
@@ -118,27 +111,5 @@ export class DonationsController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   removeDonor(@Param('id', ParseUUIDPipe, DonorExistsPipe) id: string) {
     return this.donorsService.remove(id);
-  }
-
-  // --- Webhook Endpoints (no auth guards as they are external callbacks) ---
-
-  @Post('webhook/myfatoora')
-  async handleMyFatooraWebhook(@Body() event: MyFatooraWebhookEvent) {
-    // MyFatoora webhook structure can vary. Check their documentation.
-    // Assuming the event directly contains relevant payment info or nested under 'Data'
-    try {
-      await this.donationsService.handlePaymentWebhook(
-        PaymentMethodEnum.MYFATOORA,
-        event,
-      );
-      return { received: true };
-    } catch (err) {
-      if (err instanceof Error) {
-        throw new BadRequestException(
-          `Failed to process MyFatoora webhook: ${err.message}`,
-        );
-      }
-      throw new BadRequestException('Failed to process MyFatoora webhook');
-    }
   }
 }

@@ -1,9 +1,9 @@
 import { Controller, Get, Post, Body, Param } from '@nestjs/common';
-import { DonorService } from './donor.service';
+import { DonorsService } from './donor.service';
 
 @Controller('donors')
 export class DonorController {
-  constructor(private readonly donorService: DonorService) {}
+  constructor(private readonly donorService: DonorsService) {}
 
   @Post()
   create(@Body() body: any) {

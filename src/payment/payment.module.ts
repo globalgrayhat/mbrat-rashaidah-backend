@@ -5,9 +5,10 @@ import { MyFatooraService } from './myfatoora.service';
 import { Payment } from './entities/payment.entity';
 import { Donation } from '../donations/entities/donation.entity';
 import { DonationsService } from '../donations/donations.service';
+import { AppConfigModule } from '../config/config.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Payment, Donation])],
+  imports: [TypeOrmModule.forFeature([Payment, Donation]), AppConfigModule],
   providers: [MyFatooraService, DonationsService],
   // exports: [PaymentService],
 })

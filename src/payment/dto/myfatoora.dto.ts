@@ -3,7 +3,7 @@
  * Based on MyFatoorah API v2 documentation.
  */
 export class InitiatePaymentDto {
-  NotificationOption: 'LNK' | 'EML' | 'SMS'; // Send link by Link, Email, or SMS
+  NotificationOption: 'LNK' | 'EML' | 'SMS';
   InvoiceValue: number;
   CurrencyIso: string;
   CallBackUrl: string;
@@ -12,8 +12,8 @@ export class InitiatePaymentDto {
   CustomerEmail?: string;
   CustomerMobile?: string;
   Language: 'AR' | 'EN';
-  CustomerReference: string; // e.g., Our internal Donation ID
-  UserDefinedField?: string; // To pass extra data like projectId
+  CustomerReference: string;
+  UserDefinedField?: string;
 }
 
 /**

@@ -80,31 +80,31 @@ export class AppConfigService {
 
   /** host */
   get typeDatabase(): string {
-    return this.configService.get<string>('TYPE_DATABASE') || '';
+    return this.configService.getOrThrow<string>('TYPE_DATABASE') || '';
   }
   /** host */
   get hostDatabase(): string {
-    return this.configService.get<string>('HOST_DATABASE') || '';
+    return this.configService.getOrThrow<string>('HOST_DATABASE') || '';
   }
 
   /** port */
   get portDatabase(): number {
-    return this.configService.get<number>('PORT_DATABASE') || 3306;
+    return this.configService.getOrThrow<number>('PORT_DATABASE') || 3306;
   }
 
   /** username */
   get userDatabase(): string {
-    return this.configService.get<string>('USER_DATABASE') || '';
+    return this.configService.getOrThrow<string>('USER_DATABASE') || '';
   }
 
   /** password */
   get passwordDatabase(): string {
-    return this.configService.get<string>('PASSWORD_DATABASE') || '';
+    return this.configService.getOrThrow<string>('PASSWORD_DATABASE') || '';
   }
 
   /** database name */
   get nameDatabase(): string {
-    return this.configService.get<string>('NAME_DATABASE') || '';
+    return this.configService.getOrThrow<string>('NAME_DATABASE') || '';
   }
 
   /** ==================== JWT Configuration ==================== */
@@ -149,36 +149,56 @@ export class AppConfigService {
 
   /** SMTP mail host */
   get mailHost(): string {
-    return this.configService.get<string>('MAIL_HOST', '');
+    return this.configService.getOrThrow<string>('MAIL_HOST', '');
   }
 
   /** SMTP mail port (default is 465) */
   get mailPort(): number {
-    return Number(this.configService.get<number>('MAIL_PORT', 465));
+    return Number(this.configService.getOrThrow<number>('MAIL_PORT', 465));
   }
 
   /** Mail secure protocol (e.g., SSL or TLS) */
   get mailSecure(): string {
-    return this.configService.get<string>('MAIL_SECURE', 'SSL');
+    return this.configService.getOrThrow<string>('MAIL_SECURE', 'SSL');
   }
 
   /** Mail server username */
   get mailUser(): string {
-    return this.configService.get<string>('MAIL_USER', '');
+    return this.configService.getOrThrow<string>('MAIL_USER', '');
   }
 
   /** Mail server password */
   get mailPass(): string {
-    return this.configService.get<string>('MAIL_PASS', '');
+    return this.configService.getOrThrow<string>('MAIL_PASS', '');
   }
 
   /** Sender email address */
   get mailFrom(): string {
-    return this.configService.get<string>('MAIL_FROM', '');
+    return this.configService.getOrThrow<string>('MAIL_FROM', '');
   }
 
   /** Sender name displayed in emails */
   get mailFromName(): string {
-    return this.configService.get<string>('MAIL_FROM_NAME', 'No‑Reply');
+    return this.configService.getOrThrow<string>('MAIL_FROM_NAME', 'No‑Reply');
+  }
+
+  /** ==================== Myfatoorah Configuration ==================== */
+  get myFatoorahApiKey(): string {
+    return this.configService.getOrThrow<string>('MYFATOORAH_API_KEY') || '';
+  }
+
+  get myFatoorahApiUrl(): string {
+    return (
+      this.configService.getOrThrow<string>('MYFATOORAH_API_URL') ||
+      'https://apitest.myfatoorah.com/v2/'
+    );
+  }
+  get myFatoorahCallbackUrl(): string {
+    return (
+      this.configService.getOrThrow<string>('MYFATOORAH_CALLBACK_URL') || ''
+    );
+  }
+  get myFatoorahErrorkUrl(): string {
+    return this.configService.getOrThrow<string>('MYFATOORAH_ERROR_URL') || '';
   }
 }

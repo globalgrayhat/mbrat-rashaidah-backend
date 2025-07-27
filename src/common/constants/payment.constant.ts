@@ -1,7 +1,6 @@
 export enum PaymentMethodEnum {
-  MYFATOORA = 'myfatoora',
-  KNET = 'knet', // KNET is often handled via gateways like MyFatoora
-  VISA = 'visa', // Visa/Mastercard often via gateways
+  KNET = 1, // KNET is often handled via gateways like MyFatoora
+  VISA = 2, // Visa/Mastercard often via gateways
 }
 
 export enum PaymentGatewayStatus {

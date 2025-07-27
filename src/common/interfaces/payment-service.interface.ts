@@ -13,20 +13,17 @@ export interface MyFatoorahApiResponse<T> {
   IsSuccess: boolean;
   Message: string;
   ValidationErrors?: any[];
-  Data: T; // The actual data returned by the API
+  Data: T;
 }
 export interface PaymentResult {
-  id: string; // Payment gateway's transaction ID (e.g., Stripe Checkout Session ID, MyFatoorah InvoiceId)
+  id: string;
   url?: string; // URL to redirect user for payment
-  status: 'pending' | 'succeeded' | 'failed' | 'canceled';
-  rawResponse: any; // Raw response from the payment gateway
+  status: 'pending' | 'succeeded' | 'failed' | 'canceled' | 'paid';
+  rawResponse: any;
 }
 
 export interface PaymentService {
   createPayment(payload: PaymentPayload): Promise<PaymentResult>;
-  // Potentially add more methods like:
-  // refundPayment(transactionId: string, amount: number): Promise<any>;
-  // getPaymentStatus(transactionId: string): Promise<PaymentStatus>;
 }
 
 // Specific types for webhook events to improve type safety
@@ -35,8 +32,8 @@ export interface MyFatooraWebhookEvent {
   CreatedDate: string;
   Data: {
     InvoiceId: number;
-    InvoiceStatus: number; // 1: Failed, 2: Expired, 3: Canceled, 4: Paid, 5: NotPaid
-    InvoiceReference: string; // Your ClientReferenceId
+    InvoiceStatus: number;
+    InvoiceReference: string;
     CustomerReference: string;
     CreatedDate: string;
     ExpireDate: string;
@@ -45,88 +42,74 @@ export interface MyFatooraWebhookEvent {
     CustomerName: string;
     CustomerMobile: string;
     CustomerEmail: string;
-    // ... other fields as per MyFatoorah webhook documentation
-    // Note: The structure can vary based on the MyFatoorah webhook configuration (Callback URL vs. Invoice Status Callback)
-    // You might also get direct transaction details here if it's the simple Callback URL.
   };
-  // Some MyFatoora webhooks send data directly, not nested under a 'Data' property
+
   InvoiceId?: number;
-  TransactionStatus?: string; // 'SUCCESS', 'FAILED', 'PENDING'
-  // etc.
+  TransactionStatus?: string;
 }
 
 export interface MyFatoorahResponseData {
   InvoiceId: string;
   PaymentURL: string;
-  [key: string]: any; // Optional fallback
+  [key: string]: any;
 }
 
 export interface MyFatoorahGetPaymentStatusData {
-  // Consistent naming with MyFatoorahResponseData
   InvoiceId: number;
-  InvoiceStatus: 0 | 1 | 2 | 3 | 4 | 5; // 0-Initiated, 1-Failed, 2-Expired, 3-Canceled, 4-Paid, 5-NotPaid
-  InvoiceReference?: string; // ClientReferenceId you sent
+  InvoiceStatus: 0 | 1 | 2 | 3 | 4 | 5;
+  InvoiceReference?: string;
   CustomerReference?: string;
-  CreatedDate: string; // e.g., "2024-07-25T10:30:00"
-  ExpireDate: string; // e.g., "2024-07-25T11:00:00"
+  CreatedDate: string;
+  ExpireDate: string;
   InvoiceValue: number;
   Comments?: string;
   CustomerName?: string;
   CustomerMobile?: string;
   CustomerEmail?: string;
-  // More detailed payment and transaction information can be nested here:
+
   Payments: Array<{
-    PaymentId: string; // Unique ID for this specific payment attempt/transaction
-    PaymentGateway: string; // e.g., "KNET", "Visa", "MasterCard"
+    PaymentId: string;
+    PaymentGateway: string;
     PaymentMethodId: number;
     PaymentMethod: string;
     PaymentCurrencyIso: string;
     PaymentValue: number;
-    PaymentStatus: string; // e.g., "SUCCESS", "FAILED"
+    PaymentStatus: string;
     PaymentDate: string;
     Error?: string;
     PaidCurrencyValue?: number;
     PaidCurrencyExchangeRate?: number;
-    // ... potentially more fields related to the specific payment
   }>;
-  // Other potential fields based on advanced features or specific configurations:
-  // KnetDirectPaymentUrl?: string;
-  // CardDirectPaymentUrl?: string;
-  // RecurringId?: string;
-  // CustomerCivilId?: string;
-  // ... and other optional fields
 }
 export interface MyFatoorahGetPaymentStatusResponse {
   InvoiceId: number;
-  InvoiceStatus: 0 | 1 | 2 | 3 | 4 | 5; // 0-Initiated, 1-Failed, 2-Expired, 3-Canceled, 4-Paid, 5-NotPaid
-  InvoiceReference?: string; // ClientReferenceId you sent
+  InvoiceStatus: 0 | 1 | 2 | 3 | 4 | 5;
+  InvoiceReference?: string;
   CustomerReference?: string;
-  CreatedDate: string; // e.g., "2024-07-25T10:30:00"
-  ExpireDate: string; // e.g., "2024-07-25T11:00:00"
+  CreatedDate: string;
+  ExpireDate: string;
   InvoiceValue: number;
   Comments?: string;
   CustomerName?: string;
   CustomerMobile?: string;
   CustomerEmail?: string;
-  // More detailed payment and transaction information can be nested here:
+
   Payments: Array<{
-    PaymentId: string; // Unique ID for this specific payment attempt/transaction
-    PaymentGateway: string; // e.g., "KNET", "Visa", "MasterCard"
+    PaymentId: string;
+    PaymentGateway: string;
     PaymentMethodId: number;
     PaymentMethod: string;
     PaymentCurrencyIso: string;
     PaymentValue: number;
-    PaymentStatus: string; // e.g., "SUCCESS", "FAILED"
+    PaymentStatus: string;
     PaymentDate: string;
     Error?: string;
     PaidCurrencyValue?: number;
     PaidCurrencyExchangeRate?: number;
-    // ... potentially more fields related to the specific payment
   }>;
-  // Other potential fields based on advanced features or specific configurations:
+
   KnetDirectPaymentUrl?: string;
   CardDirectPaymentUrl?: string;
   RecurringId?: string;
   CustomerCivilId?: string;
-  // ... and other optional fields
 }
