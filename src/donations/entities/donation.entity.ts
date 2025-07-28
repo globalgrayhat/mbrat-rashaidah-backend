@@ -51,11 +51,11 @@ export class Donation {
   webhookResponse?: any;
   // --- End Payment Gateway Details ---
 
-  @ManyToOne(() => Payment, { nullable: true })
+  @ManyToOne(() => Payment, (p) => p.donations, { nullable: true })
   @JoinColumn({ name: 'paymentId' })
   payment?: Payment;
 
-  @Column('uuid', { nullable: true })
+  @Column({ type: 'char', length: 36, nullable: true })
   paymentId?: string;
 
   @Column({ type: 'timestamp', nullable: true })

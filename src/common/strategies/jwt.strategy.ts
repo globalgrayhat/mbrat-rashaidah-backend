@@ -25,10 +25,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const user = await this.usersService.findByEmail(payload.email);
     if (!user) throw new UnauthorizedException('Invalid token');
 
-    return {
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    };
+    return user;
   }
 }

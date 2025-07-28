@@ -5,42 +5,58 @@ import {
   IsEnum,
   IsOptional,
   IsNotEmpty,
-  ValidateIf,
+  ValidateNested,
+  ArrayNotEmpty,
   Min,
-  Validate,
+  // IsEmail,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { PaymentMethodEnum } from '../../common/constants/payment.constant';
 import { CreateDonorDto } from '../../donor/dto/create-donor.dto';
-import { Type } from 'class-transformer';
-import { IsValidDonationTargetConstraint } from '../../common/validators/IsValidDonationTarget.validator';
 
-export class CreateDonationDto {
+/**
+ * DTO representing a single donation item (either to a project or a campaign).
+ */
+export class DonationItemDto {
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  campaignId?: string;
+
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   amount: number;
+
+  // @IsString()
+  // @IsNotEmpty()
+  // @IsEmail()
+  // email: string;
+
+  // @IsNumber()
+  // phoneNumber: number;
+}
+
+/**
+ * DTO for creating a new donation request, supporting multiple donation targets.
+ */
+export class CreateDonationDto {
+  @IsEnum(PaymentMethodEnum)
+  paymentMethod: PaymentMethodEnum;
 
   @IsString()
   @IsNotEmpty()
   currency: string;
 
-  @IsEnum(PaymentMethodEnum)
-  paymentMethod: PaymentMethodEnum;
-
   @IsOptional()
-  @IsUUID()
-  @ValidateIf((o: CreateDonationDto) => !o.campaignId)
-  projectId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  @ValidateIf((o: CreateDonationDto) => !o.projectId)
-  campaignId?: string;
-
-  @IsOptional()
+  @ValidateNested()
   @Type(() => CreateDonorDto)
   donorInfo?: CreateDonorDto;
 
-  // Apply custom validator to ensure exactly one of projectId or campaignId is set
-  @Validate(IsValidDonationTargetConstraint)
-  _targetCheck: any;
+  @ArrayNotEmpty()
+  @ValidateNested({ each: true })
+  @Type(() => DonationItemDto)
+  donationItems: DonationItemDto[];
 }

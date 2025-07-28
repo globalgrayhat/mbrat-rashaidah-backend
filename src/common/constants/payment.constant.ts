@@ -9,3 +9,4 @@ export enum PaymentGatewayStatus {
   PENDING = 0, // Custom pending status
   // Add other relevant statuses as needed per gateway
 }
+export type MFKeyType = 'InvoiceId' | 'PaymentId' | 'CustomerReference';

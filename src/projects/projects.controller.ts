@@ -8,6 +8,7 @@ import {
   UseGuards,
   Patch,
   ParseUUIDPipe,
+  Request,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -18,7 +19,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
 import { ProjectStatus } from '../common/constants/project.constant';
 import { ProjectExistsPipe } from '../common/pipes/projectExists.pipe'; // Import the new pipe
-
+import { User } from '../user/entities/user.entity';
 @Controller('projects')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProjectsController {
@@ -26,8 +27,16 @@ export class ProjectsController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  create(@Body() createProjectDto: CreateProjectDto) {
-    return this.projectsService.create(createProjectDto);
+  create(
+    @Body() createProjectDto: CreateProjectDto,
+    @Request() req: { user: User },
+  ) {
+    const user: User = req.user;
+    console.log('req.user:', req.user.id);
+    return this.projectsService.create(createProjectDto, {
+      ...user,
+      id: user.id,
+    });
   }
 
   @Get()

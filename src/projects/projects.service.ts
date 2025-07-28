@@ -13,6 +13,7 @@ import { Country } from '../countries/entities/country.entity';
 import { Continent } from '../continents/entities/continent.entity';
 import { Media } from '../media/entities/media.entity';
 import { ProjectStatus } from '../common/constants/project.constant';
+import { User } from 'src/user/entities/user.entity';
 // import { Donation } from '../donations/entities/donation.entity'; // Import Donation
 
 @Injectable()
@@ -50,7 +51,10 @@ export class ProjectsService {
     }
   }
 
-  async create(createProjectDto: CreateProjectDto): Promise<Project> {
+  async create(
+    createProjectDto: CreateProjectDto,
+    user: User,
+  ): Promise<Project> {
     const {
       title,
       slug,
@@ -119,6 +123,7 @@ export class ProjectsService {
       donationGoal: createProjectDto.donationGoal,
       donationCount: 0, // Initialize donationCount
       viewCount: 0, // Initialize viewCount
+      createdById: user.id,
       // viewCount, donationCount, createdById, etc. remain default/null
     });
 

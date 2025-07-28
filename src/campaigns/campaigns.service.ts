@@ -11,6 +11,7 @@ import { UpdateCampaignDto } from './dto/UpdateCampaignDto';
 import { Category } from '../categories/entities/category.entity';
 import { Media } from '../media/entities/media.entity';
 import { CampaignStatus } from '../common/constants/campaignStatus.constant';
+import { User } from 'src/user/entities/user.entity';
 
 @Injectable()
 export class CampaignsService {
@@ -43,7 +44,10 @@ export class CampaignsService {
     }
   }
 
-  async create(createCampaignDto: CreateCampaignDto): Promise<Campaign> {
+  async create(
+    createCampaignDto: CreateCampaignDto,
+    user: User,
+  ): Promise<Campaign> {
     const {
       title,
       slug,
@@ -72,6 +76,7 @@ export class CampaignsService {
       isDonationActive: otherFields.isDonationActive ?? true,
       isProgressActive: otherFields.isProgressActive ?? true,
       isTargetAmountActive: otherFields.isTargetAmountActive ?? true,
+      createdById: user.id,
     });
 
     if (mediaIds.length > 0) {

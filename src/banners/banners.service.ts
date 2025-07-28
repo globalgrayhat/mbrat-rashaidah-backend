@@ -4,21 +4,32 @@ import { Repository } from 'typeorm';
 import { Banner } from './entities/banner.entity';
 import { CreateBannerDto } from './dto/create-banner.dto';
 import { UpdateBannerDto } from './dto/update-banner.dto';
-
+import { User } from '../user/entities/user.entity';
+import { Media } from '../media/entities/media.entity';
 @Injectable()
 export class BannersService {
   constructor(
     @InjectRepository(Banner)
     private readonly bannerRepository: Repository<Banner>,
+    @InjectRepository(Media)
+    private readonly mediaRepository: Repository<Media>,
   ) {}
 
-  async create(
-    createBannerDto: CreateBannerDto,
-    userId: string,
-  ): Promise<Banner> {
+  async create(createBannerDto: CreateBannerDto, user: User): Promise<Banner> {
+    if (createBannerDto.mediaId) {
+      const media = await this.mediaRepository.findOne({
+        where: { id: createBannerDto.mediaId },
+      });
+
+      if (!media) {
+        throw new NotFoundException(
+          `Media with ID "${createBannerDto.mediaId}" not found.`,
+        );
+      }
+    }
     const banner = this.bannerRepository.create({
       ...createBannerDto,
-      createdById: userId,
+      createdById: user.id,
     });
     return this.bannerRepository.save(banner);
   }

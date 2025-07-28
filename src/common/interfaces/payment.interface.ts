@@ -5,15 +5,15 @@ export interface PaymentResult {
   [key: string]: any;
 }
 
-export interface StripeEvent {
-  type: string;
-  data: {
-    object: {
-      id: string;
-      payment_status: string;
-      status: string;
-    };
-  };
+export interface PaymentPayload {
+  amount: number;
+  currency: string;
+  donationId: string;
+  description: string;
+  customerName?: string;
+  customerEmail?: string;
+  mobileCountryCode?: string;
+  customerMobile?: string;
 }
 
 export interface MyFatooraEvent {

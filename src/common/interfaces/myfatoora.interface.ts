@@ -30,7 +30,7 @@ export interface MyFatooraSendPaymentResponse {
   Data: {
     InvoiceId: number;
     IsDirectPayment: boolean;
-    PaymentURL: string;
+    InvoiceURL: string;
     CustomerReference: string;
     UserDefinedField: string;
   } | null;

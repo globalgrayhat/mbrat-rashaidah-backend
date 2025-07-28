@@ -4,8 +4,9 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToOne,
-  JoinColumn,
+  // OneToOne,
+  // JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { Donation } from '../../donations/entities/donation.entity';
 import { PaymentMethodEnum } from '../../common/constants/payment.constant';
@@ -72,13 +73,8 @@ export class Payment {
    * A one-to-one relationship with the Donation entity.
    * TypeORM will automatically create a `donationId` foreign key column in the database based on this relationship.
    */
-  @OneToOne(() => Donation, (donation) => donation.payment, {
-    nullable: true,
-    // If the related Donation is deleted, set the donationId in this payment to NULL.
-    onDelete: 'SET NULL',
-  })
-  @JoinColumn({ name: 'donationId' })
-  donation: Donation;
+  @OneToMany(() => Donation, (d) => d.payment)
+  donations: Donation[];
 
   /**
    * Timestamp automatically set when the payment record is first created.

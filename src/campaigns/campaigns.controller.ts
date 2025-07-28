@@ -8,6 +8,7 @@ import {
   UseGuards,
   Patch,
   ParseUUIDPipe,
+  Request,
 } from '@nestjs/common';
 import { CampaignsService } from './campaigns.service';
 import { CreateCampaignDto } from './dto/createCampaignDto';
@@ -18,6 +19,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
 import { CampaignStatus } from '../common/constants/campaignStatus.constant';
 import { CampaignExistsPipe } from '../common/pipes/campaignExists.pipe'; // Need to create this pipe
+import { User } from '../user/entities/user.entity';
 
 @Controller('campaigns')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,8 +28,15 @@ export class CampaignsController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  create(@Body() createCampaignDto: CreateCampaignDto) {
-    return this.campaignsService.create(createCampaignDto);
+  create(
+    @Body() createCampaignDto: CreateCampaignDto,
+    @Request() req: { user: User },
+  ) {
+    const user: User = req.user;
+    return this.campaignsService.create(createCampaignDto, {
+      ...user,
+      id: user.id,
+    });
   }
 
   @Get()

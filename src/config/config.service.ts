@@ -201,4 +201,26 @@ export class AppConfigService {
   get myFatoorahErrorkUrl(): string {
     return this.configService.getOrThrow<string>('MYFATOORAH_ERROR_URL') || '';
   }
+
+  get myFatoorahTz(): string {
+    const tz = this.configService.getOrThrow<string>('MYFATOORAH_TZ');
+    return tz && tz.trim() ? tz : 'Asia/Kuwait';
+  }
+
+  get myFatoorahInvoiceTtlMinutes(): number | undefined {
+    const v = this.configService.getOrThrow<string>(
+      'MYFATOORAH_INVOICE_TTL_MINUTES',
+    );
+    if (v === undefined || v === null) return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  }
+
+  get myFatoorahTtlSkewSeconds(): number {
+    const v = this.configService.getOrThrow<string>(
+      'MYFATOORAH_TTL_SKEW_SECONDS',
+    );
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : 30;
+  }
 }

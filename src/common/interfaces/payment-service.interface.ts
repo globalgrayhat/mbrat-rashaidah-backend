@@ -7,6 +7,8 @@ export interface PaymentPayload {
   description: string;
   customerName?: string;
   customerEmail?: string;
+  mobileCountryCode?: string; // e.g. "965"
+  customerMobile?: string;
 }
 
 export interface MyFatoorahApiResponse<T> {
@@ -50,7 +52,7 @@ export interface MyFatooraWebhookEvent {
 
 export interface MyFatoorahResponseData {
   InvoiceId: string;
-  PaymentURL: string;
+  InvoiceURL: string;
   [key: string]: any;
 }
 
