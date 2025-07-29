@@ -48,6 +48,12 @@ export class DonationsController {
     return this.donationsService.create(dto);
   }
 
+  @Get()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  findAll() {
+    return this.donationsService.findAll();
+  }
+
   @Get('project/:projectId')
   findByProject(
     @Param('projectId', ParseUUIDPipe, ProjectExistsPipe) projectId: string,
@@ -69,7 +75,6 @@ export class DonationsController {
     return this.donationsService.findByDonor(donorId);
   }
 
-  /** DRY: عبر Query ما فيه Pipes تتعارض */
   @Get('payment-status')
   getAndReconcile(
     @Query('key') key: string,
@@ -79,7 +84,6 @@ export class DonationsController {
     return this.donationsService.reconcilePayment(key, type);
   }
 
-  /** Alias واضح للإنفويس (ParseIntPipe بدال ريجكس في المسار) */
   @Get('payment-status/invoice/:invoiceId')
   getAndReconcileByInvoiceId(
     @Param('invoiceId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
@@ -91,7 +95,6 @@ export class DonationsController {
     );
   }
 
-  /** Alias للـ PaymentId كما هو (سترنق) */
   @Get('payment-status/payment/:paymentId')
   getAndReconcileByPaymentId(@Param('paymentId') paymentId: string) {
     return this.donationsService.reconcilePayment(paymentId, 'PaymentId');
