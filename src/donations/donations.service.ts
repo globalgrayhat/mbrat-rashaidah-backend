@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   Injectable,
   NotAcceptableException,
@@ -21,33 +20,22 @@ import { Donor } from '../donor/entities/donor.entity';
 import { User } from '../user/entities/user.entity';
 import { Payment } from '../payment/entities/payment.entity';
 
-import {
-  MyFatooraWebhookEvent,
-  MyFatoorahGetPaymentStatusData,
-} from '../common/interfaces/payment-service.interface';
+import { MyFatooraWebhookEvent } from '../common/interfaces/payment-service.interface';
 import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
 import { PaymentMethodEnum } from '../common/constants/payment.constant';
 import { MyFatooraService } from '../payment/myfatoora.service';
 
-export enum MFInvoiceStatus {
-  Pending = 'Pending',
-  Paid = 'Paid',
-  Canceled = 'Canceled',
-}
-export enum MFTransactionStatus {
-  InProgress = 'InProgress',
-  Succss = 'Succss',
-  Failed = 'Failed',
-  Canceled = 'Canceled',
-  Authorize = 'Authorize',
-}
+import {
+  deriveOutcome,
+  normalizeTxStatus,
+} from '../common/utils/mf-status.util';
+
 type MfOutcome = 'paid' | 'failed' | 'pending';
 
 @Injectable()
 export class DonationsService {
   constructor(
     private readonly dataSource: DataSource,
-
     @InjectRepository(Donation)
     private readonly donationRepository: Repository<Donation>,
     @InjectRepository(Project)
@@ -58,9 +46,7 @@ export class DonationsService {
     private readonly donorRepository: Repository<Donor>,
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-
+    @InjectRepository(User) private readonly userRepository: Repository<User>,
     private readonly myFatooraService: MyFatooraService,
   ) {}
 
@@ -72,28 +58,6 @@ export class DonationsService {
   }
   private calcQuantity(ds: Donation[]) {
     return ds.length;
-  }
-
-  private mapMfOutcome(
-    invoiceStatus?: MFInvoiceStatus,
-    txStatuses: MFTransactionStatus[] = [],
-  ): MfOutcome {
-    if (
-      invoiceStatus === MFInvoiceStatus.Paid ||
-      txStatuses.includes(MFTransactionStatus.Succss)
-    )
-      return 'paid';
-    if (
-      invoiceStatus === MFInvoiceStatus.Canceled ||
-      (txStatuses.length &&
-        txStatuses.every((s) =>
-          [MFTransactionStatus.Failed, MFTransactionStatus.Canceled].includes(
-            s,
-          ),
-        ))
-    )
-      return 'failed';
-    return 'pending';
   }
 
   private async handleDonorCreation(
@@ -172,7 +136,7 @@ export class DonationsService {
         return {
           amount: item.amount,
           projectId: item.projectId,
-          targetEntity: project as Project,
+          targetEntity: project,
           targetType: 'project' as const,
         };
       }
@@ -187,7 +151,7 @@ export class DonationsService {
         return {
           amount: item.amount,
           campaignId: item.campaignId,
-          targetEntity: campaign as Campaign,
+          targetEntity: campaign,
           targetType: 'campaign' as const,
         };
       }
@@ -225,6 +189,7 @@ export class DonationsService {
     return em.save(entities);
   }
 
+  /** outcome→ DB + aggregates (NO heavy relations to avoid Unknown column errors) */
   private async applyPaymentOutcome(
     payment: Payment,
     outcome: MfOutcome,
@@ -237,18 +202,12 @@ export class DonationsService {
 
     const donations = await this.donationRepository.find({
       where: { paymentId: payment.id },
-      relations: ['project', 'campaign'],
+      select: ['id', 'amount', 'status', 'projectId', 'campaignId', 'paidAt'],
     });
 
     const toUpdate: Donation[] = [];
-    const projectDelta = new Map<
-      string,
-      { entity: Project; amount: number; count: number }
-    >();
-    const campaignDelta = new Map<
-      string,
-      { entity: Campaign; amount: number; count: number }
-    >();
+    const projectDelta = new Map<string, { amount: number; count: number }>();
+    const campaignDelta = new Map<string, { amount: number; count: number }>();
 
     for (const d of donations) {
       if (
@@ -263,48 +222,54 @@ export class DonationsService {
           : DonationStatusEnum.FAILED;
 
       if (outcome === 'paid') {
-        d.paidAt = new Date();
-
-        if (d.project) {
-          const rec = projectDelta.get(d.project.id) || {
-            entity: d.project,
+        (d as any).paidAt = new Date();
+        if (d.projectId) {
+          const rec = projectDelta.get(d.projectId) || { amount: 0, count: 0 };
+          rec.amount += Number(d.amount);
+          rec.count += 1;
+          projectDelta.set(d.projectId, rec);
+        } else if (d.campaignId) {
+          const rec = campaignDelta.get(d.campaignId) || {
             amount: 0,
             count: 0,
           };
           rec.amount += Number(d.amount);
           rec.count += 1;
-          projectDelta.set(d.project.id, rec);
-        } else if (d.campaign) {
-          const rec = campaignDelta.get(d.campaign.id) || {
-            entity: d.campaign,
-            amount: 0,
-            count: 0,
-          };
-          rec.amount += Number(d.amount);
-          rec.count += 1;
-          campaignDelta.set(d.campaign.id, rec);
+          campaignDelta.set(d.campaignId, rec);
         }
       }
+
       toUpdate.push(d);
     }
 
-    for (const { entity, amount, count } of projectDelta.values()) {
-      entity.currentAmount += amount;
-      entity.donationCount += count;
+    const [projects, campaigns] = await Promise.all([
+      projectDelta.size
+        ? this.projectRepository.find({
+            where: { id: In([...projectDelta.keys()]) },
+          })
+        : Promise.resolve([]),
+      campaignDelta.size
+        ? this.campaignRepository.find({
+            where: { id: In([...campaignDelta.keys()]) },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    for (const p of projects) {
+      const rec = projectDelta.get(p.id)!;
+      p.currentAmount += rec.amount;
+      p.donationCount += rec.count;
     }
-    for (const { entity, amount, count } of campaignDelta.values()) {
-      entity.currentAmount += amount;
-      entity.donationCount += count;
+    for (const c of campaigns) {
+      const rec = campaignDelta.get(c.id)!;
+      c.currentAmount += rec.amount;
+      c.donationCount += rec.count;
     }
 
     await Promise.all([
       toUpdate.length ? em.save(toUpdate) : undefined,
-      projectDelta.size
-        ? em.save([...projectDelta.values()].map((v) => v.entity))
-        : undefined,
-      campaignDelta.size
-        ? em.save([...campaignDelta.values()].map((v) => v.entity))
-        : undefined,
+      projects.length ? em.save(projects) : undefined,
+      campaigns.length ? em.save(campaigns) : undefined,
     ]);
 
     return { updatedDonations: toUpdate.map((d) => d.id), outcome };
@@ -314,11 +279,9 @@ export class DonationsService {
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
-
     try {
       const { donorInfo, donationItems, paymentMethod, currency } =
         createDonationDto;
-
       if (!this.isSupportedPaymentMethod(paymentMethod))
         throw new NotAcceptableException('Unsupported payment method');
 
@@ -334,7 +297,6 @@ export class DonationsService {
         paymentMethod,
         qr.manager,
       );
-
       const totalAmount = this.calcTotalAmount(donations);
       const quantity = this.calcQuantity(donations);
 
@@ -374,14 +336,15 @@ export class DonationsService {
         totalAmount,
         invoiceId: paymentResult.id,
       };
-    } catch (err) {
+    } catch (e) {
       await qr.rollbackTransaction();
-      throw err;
+      throw e;
     } finally {
       await qr.release();
     }
   }
 
+  /** Webhook (Callback) من MyFatoorah */
   public async handlePaymentWebhook(
     methods: PaymentMethodEnum[],
     webhookEvent: MyFatooraWebhookEvent,
@@ -389,13 +352,12 @@ export class DonationsService {
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
-
     try {
       if (!methods.every((m) => this.isSupportedPaymentMethod(m)))
         throw new NotAcceptableException('Unsupported payment method');
 
       const data = webhookEvent.Data ?? webhookEvent;
-      const invoiceId = String(data.InvoiceId);
+      const invoiceId = String((data as any).InvoiceId);
       if (!invoiceId)
         throw new BadRequestException('Missing invoice ID in webhook');
 
@@ -409,30 +371,28 @@ export class DonationsService {
 
       const firstPayment = (data as any)?.Payments?.[0];
       if (firstPayment?.PaymentId && !(payment as any).mfPaymentId) {
-        (payment as any).mfPaymentId = firstPayment.PaymentId;
+        (payment as any).mfPaymentId = String(firstPayment.PaymentId);
       }
 
-      const txStatuses: MFTransactionStatus[] = (data as any)?.Payments?.map(
-        (p: any) => p.PaymentStatus,
-      ) ?? [webhookEvent.TransactionStatus as MFTransactionStatus];
+      const txStatuses = (data as any)?.Payments?.map((p: any) =>
+        normalizeTxStatus(p?.PaymentStatus),
+      ) ?? [normalizeTxStatus((webhookEvent as any)?.TransactionStatus)];
 
-      const outcome = this.mapMfOutcome(
-        data.InvoiceStatus as unknown as MFInvoiceStatus,
-        txStatuses,
-      );
+      const outcome = deriveOutcome((data as any)?.InvoiceStatus, txStatuses);
 
       await this.applyPaymentOutcome(payment, outcome, qr.manager);
 
       await qr.commitTransaction();
       return { success: true, outcome };
-    } catch (err) {
+    } catch (e) {
       await qr.rollbackTransaction();
-      throw err;
+      throw e;
     } finally {
       await qr.release();
     }
   }
 
+  /** Reconcile (on-demand / cron) */
   public async reconcilePayment(
     key: string,
     keyType: 'PaymentId' | 'InvoiceId' = 'InvoiceId',
@@ -440,7 +400,6 @@ export class DonationsService {
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
-
     try {
       const payment = await this.paymentRepository.findOne({
         where:
@@ -455,28 +414,21 @@ export class DonationsService {
         key,
         keyType,
       );
-
-      const invoiceStatus = raw.InvoiceStatus as unknown as MFInvoiceStatus;
-      const txStatuses: MFTransactionStatus[] =
-        raw.Payments?.map((p) => p.PaymentStatus as MFTransactionStatus) ?? [];
-
-      const finalOutcome = this.mapMfOutcome(invoiceStatus, txStatuses);
+      const txStatuses =
+        raw?.Payments?.map((p) => normalizeTxStatus(p?.PaymentStatus)) ?? [];
+      const outcome = deriveOutcome(raw?.InvoiceStatus, txStatuses);
 
       const { updatedDonations } = await this.applyPaymentOutcome(
         payment,
-        finalOutcome,
+        outcome,
         qr.manager,
       );
 
       await qr.commitTransaction();
-      return {
-        outcome: finalOutcome,
-        paymentId: payment.id,
-        updatedDonations,
-      };
-    } catch (err) {
+      return { outcome, paymentId: payment.id, updatedDonations };
+    } catch (e) {
       await qr.rollbackTransaction();
-      throw err;
+      throw e;
     } finally {
       await qr.release();
     }
@@ -521,7 +473,6 @@ export class DonationsService {
       order: { createdAt: 'DESC' },
     });
   }
-
   public async update(id: string, dto: UpdateDonationDto) {
     const donation = await this.findOne(id);
     if (dto.projectId || dto.campaignId)
@@ -531,7 +482,6 @@ export class DonationsService {
     Object.assign(donation, dto);
     return this.donationRepository.save(donation);
   }
-
   public async remove(id: string) {
     const result = await this.donationRepository.delete(id);
     if (!result.affected)

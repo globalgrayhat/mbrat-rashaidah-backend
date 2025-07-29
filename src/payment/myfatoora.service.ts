@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   Injectable,
   InternalServerErrorException,
@@ -19,49 +18,7 @@ import {
 } from '../common/interfaces/payment-service.interface';
 import { AppConfigService } from '../config/config.service';
 import type { MFKeyType } from '../common/constants/payment.constant';
-
-// ------------------------------------------------------------
-// MyFatoorah canonical enums (strings, not mysterious numbers!)
-// ------------------------------------------------------------
-
-export enum MFInvoiceStatus {
-  Pending = 'Pending',
-  Paid = 'Paid',
-  Canceled = 'Canceled',
-}
-
-export enum MFTransactionStatus {
-  InProgress = 'InProgress',
-  Succss = 'Succss',
-  Failed = 'Failed',
-  Canceled = 'Canceled',
-  Authorize = 'Authorize',
-}
-
-// ------------------------------------------------------------
-// Helper: normalize MF response → unified outcome
-// ------------------------------------------------------------
-export function mapMfOutcome(
-  invoiceStatus?: MFInvoiceStatus,
-  txStatuses: MFTransactionStatus[] = [],
-): 'paid' | 'failed' | 'pending' {
-  if (
-    invoiceStatus === MFInvoiceStatus.Paid ||
-    txStatuses.includes(MFTransactionStatus.Succss)
-  ) {
-    return 'paid';
-  }
-  if (
-    invoiceStatus === MFInvoiceStatus.Canceled ||
-    (txStatuses.length > 0 &&
-      txStatuses.every((s) =>
-        [MFTransactionStatus.Failed, MFTransactionStatus.Canceled].includes(s),
-      ))
-  ) {
-    return 'failed';
-  }
-  return 'pending';
-}
+import { deriveOutcome } from '../common/utils/mf-status.util';
 
 @Injectable()
 export class MyFatooraService implements PaymentService {
@@ -74,16 +31,13 @@ export class MyFatooraService implements PaymentService {
   private readonly ttlSkewSeconds: number;
 
   constructor(private readonly config: AppConfigService) {
-    // ------------------------------ API key ------------------------------
     const apiKey = this.config.myFatoorahApiKey;
-    if (!apiKey) {
+    if (!apiKey)
       throw new InternalServerErrorException(
         'MyFatoorah API Key is not configured.',
       );
-    }
     this.apiKey = apiKey;
 
-    // ------------------------------ Invoice TTL ------------------------------
     const ttl = Number(this.config.myFatoorahInvoiceTtlMinutes);
     if (!Number.isFinite(ttl) || ttl <= 0) {
       throw new InternalServerErrorException(
@@ -92,15 +46,11 @@ export class MyFatooraService implements PaymentService {
     }
     this.invoiceTtlMinutes = ttl;
 
-    // ------------------------------ Timezone & skew ------------------------------
     this.invoiceTz = this.config.myFatoorahTz || 'Asia/Kuwait';
     const skew = Number(this.config.myFatoorahTtlSkewSeconds ?? 30);
     this.ttlSkewSeconds = Number.isFinite(skew) && skew >= 0 ? skew : 30;
 
-    // ------------------------------ Base URL ------------------------------
-    const raw = (
-      this.config.myFatoorahApiUrl || 'https://apitest.myfatoorah.com'
-    ).trim();
+    const raw = this.config.myFatoorahApiUrl.trim();
     const noTrail = raw.replace(/\/+$/, '');
     this.baseUrl = noTrail.endsWith('/v2') ? `${noTrail}/` : `${noTrail}/v2/`;
 
@@ -114,11 +64,6 @@ export class MyFatooraService implements PaymentService {
     });
   }
 
-  // ------------------------------------------------------------
-  // Utils
-  // ------------------------------------------------------------
-
-  /** Format MyFatoorah ExpiryDate (YYYY-MM-DDTHH:mm:ss) in merchant TZ */
   private formatMFExpiry(minutesFromNow: number, tz: string): string {
     const target = new Date(
       Date.now() + minutesFromNow * 60_000 + this.ttlSkewSeconds * 1_000,
@@ -137,12 +82,9 @@ export class MyFatooraService implements PaymentService {
     const get = (t: Intl.DateTimeFormatPartTypes) =>
       parts.find((p) => p.type === t)?.value ?? '00';
 
-    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get(
-      'minute',
-    )}:${get('second')}`;
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
   }
 
-  /** Add optional customer fields only when provided */
   private buildCustomerExtras(
     name?: string,
     email?: string,
@@ -155,7 +97,6 @@ export class MyFatooraService implements PaymentService {
     return out;
   }
 
-  /** Small axios wrapper with consistent error handling */
   private async request<T>(
     method: Method,
     url: string,
@@ -166,9 +107,8 @@ export class MyFatooraService implements PaymentService {
       const config: AxiosRequestConfig = {
         method,
         url,
-        ...(typeof data !== 'undefined' ? { data } : {}),
+        ...(data !== undefined ? { data } : {}),
       };
-
       const response = await this.http.request<{
         IsSuccess: boolean;
         Message: string;
@@ -192,7 +132,6 @@ export class MyFatooraService implements PaymentService {
       const errorMessage =
         (axiosError.response?.data as { Message?: string })?.Message ||
         axiosError.message;
-
       console.error(
         `${operationName} error:`,
         axiosError.response?.data || axiosError.message,
@@ -203,11 +142,6 @@ export class MyFatooraService implements PaymentService {
     }
   }
 
-  // ------------------------------------------------------------
-  // Public API
-  // ------------------------------------------------------------
-
-  /** Create invoice (SendPayment) */
   async createPayment(
     payload: PaymentPayload & { paymentMethodId?: number },
   ): Promise<PaymentResult> {
@@ -262,35 +196,7 @@ export class MyFatooraService implements PaymentService {
     };
   }
 
-  /** Preferred: Inquire by **PaymentId** (أدق وأسرع) */
-  async getPaymentStatusByPaymentId(paymentId: string): Promise<{
-    outcome: 'paid' | 'failed' | 'pending';
-    invoiceId: string;
-    raw: MyFatoorahGetPaymentStatusData;
-  }> {
-    if (!paymentId) throw new BadRequestException('PaymentId is required.');
-
-    const data = await this.request<MyFatoorahGetPaymentStatusData>(
-      'post',
-      'GetPaymentStatus',
-      { Key: paymentId, KeyType: 'PaymentId' },
-      'Get MyFatoorah payment status',
-    );
-
-    const invoiceStatus = data.InvoiceStatus as unknown as MFInvoiceStatus;
-    const txStatuses =
-      data.Payments?.map(
-        (p) => p.PaymentStatus as unknown as MFTransactionStatus,
-      ) ?? [];
-
-    return {
-      invoiceId: data.InvoiceId.toString(),
-      outcome: mapMfOutcome(invoiceStatus, txStatuses),
-      raw: data,
-    };
-  }
-
-  /** Fallback: Inquire by InvoiceId or CustomerReference */
+  /** Unified status snapshot */
   async getPaymentStatus(
     key: string,
     keyType: MFKeyType = 'InvoiceId',
@@ -299,6 +205,7 @@ export class MyFatooraService implements PaymentService {
     invoiceId: string;
     raw: MyFatoorahGetPaymentStatusData;
   }> {
+    if (!key) throw new BadRequestException('Key is required.');
     const data = await this.request<MyFatoorahGetPaymentStatusData>(
       'post',
       'GetPaymentStatus',
@@ -306,16 +213,16 @@ export class MyFatooraService implements PaymentService {
       'Get MyFatoorah payment status',
     );
 
-    const invoiceStatus = data.InvoiceStatus as unknown as MFInvoiceStatus;
-    const txStatuses =
-      data.Payments?.map(
-        (p) => p.PaymentStatus as unknown as MFTransactionStatus,
-      ) ?? [];
+    const paymentStatuses = data.Payments?.map((p) => p?.PaymentStatus) ?? [];
 
     return {
-      invoiceId: data.InvoiceId.toString(),
-      outcome: mapMfOutcome(invoiceStatus, txStatuses),
+      invoiceId: String(data.InvoiceId),
+      outcome: deriveOutcome(data.InvoiceStatus as unknown, paymentStatuses),
       raw: data,
     };
+  }
+
+  async getPaymentStatusByPaymentId(paymentId: string) {
+    return this.getPaymentStatus(paymentId, 'PaymentId');
   }
 }
