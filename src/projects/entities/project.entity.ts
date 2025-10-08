@@ -42,10 +42,10 @@ export class Project {
   @Column({ type: 'timestamp', nullable: true })
   endDate?: Date;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 0 })
   targetAmount: number;
 
-  @Column('decimal', { precision: 10, scale: 2, default: 0 })
+  @Column('decimal', { precision: 10, scale: 0, default: 1 })
   currentAmount: number;
 
   @ManyToOne(() => Category, { eager: true })
@@ -102,7 +102,7 @@ export class Project {
   @Column({ default: true })
   isTargetAmountActive: boolean;
 
-  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  @Column('decimal', { precision: 10, scale: 0, nullable: true })
   donationGoal?: number;
 
   @CreateDateColumn({ type: 'timestamp' })

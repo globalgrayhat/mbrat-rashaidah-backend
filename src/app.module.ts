@@ -72,7 +72,6 @@ import { Payment } from './payment/entities/payment.entity';
           Payment,
         ],
         synchronize: config.isDevelopment, // Auto-sync entities (only in development)
-
         // Optional: SSL configuration if required by the host (e.g., Clever Cloud)
         // ssl: {
         //   rejectUnauthorized: false, // Accept self-signed certificates

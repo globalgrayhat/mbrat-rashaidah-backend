@@ -61,13 +61,13 @@ export class Campaign {
   /**
    * Target fundraising amount
    */
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 0 })
   targetAmount: number;
 
   /**
    * Current amount raised
    */
-  @Column('decimal', { precision: 10, scale: 2, default: 0 })
+  @Column('decimal', { precision: 10, scale: 0, default: 0 })
   currentAmount: number;
 
   /**
@@ -143,7 +143,7 @@ export class Campaign {
   /**
    * Optional specific donation goal
    */
-  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  @Column('decimal', { precision: 10, scale: 0, nullable: true })
   donationGoal?: number;
 
   /**
