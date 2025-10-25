@@ -107,6 +107,12 @@ export class DonationsController {
     return this.donationsService.handlePaymentWebhook(supported, body);
   }
 
+  @Get('payment/:paymentId')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  findByPayment(@Param('paymentId') paymentId: string) {
+    return this.donationsService.findByPayment(paymentId);
+  }
+
   @Post('donors')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   createDonor(@Body() dto: CreateDonorDto) {

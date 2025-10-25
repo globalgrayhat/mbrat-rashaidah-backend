@@ -160,6 +160,49 @@ export class DonationsService {
       );
     });
   }
+  private normalizeItems(
+    validated: Awaited<ReturnType<typeof this.validateItems>>,
+  ): {
+    amount: number;
+    projectId?: string;
+    campaignId?: string;
+    targetEntity: Project | Campaign;
+    targetType: 'project' | 'campaign';
+  }[] {
+    const map = new Map<
+      string,
+      {
+        amount: number;
+        projectId?: string;
+        campaignId?: string;
+        targetEntity: Project | Campaign;
+        targetType: 'project' | 'campaign';
+      }
+    >();
+
+    for (const it of validated) {
+      const key =
+        it.targetType === 'project'
+          ? `p:${it.targetEntity.id}`
+          : `c:${it.targetEntity.id}`;
+      const prev = map.get(key);
+      if (prev) {
+        prev.amount += Number(it.amount);
+      } else {
+        map.set(key, {
+          amount: Number(it.amount),
+          projectId:
+            it.targetType === 'project' ? it.targetEntity.id : undefined,
+          campaignId:
+            it.targetType === 'campaign' ? it.targetEntity.id : undefined,
+          targetEntity: it.targetEntity,
+          targetType: it.targetType,
+        });
+      }
+    }
+
+    return [...map.values()];
+  }
 
   private async createDonations(
     items: {
@@ -276,34 +319,92 @@ export class DonationsService {
   }
 
   public async create(createDonationDto: CreateDonationDto) {
+    // Create an explicit DB transaction to ensure atomicity (all-or-nothing)
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
+
     try {
       const { donorInfo, donationItems, paymentMethod, currency } =
         createDonationDto;
-      if (!this.isSupportedPaymentMethod(paymentMethod))
+
+      // 1) Validate supported payment method (domain guard)
+      if (!this.isSupportedPaymentMethod(paymentMethod)) {
         throw new NotAcceptableException('Unsupported payment method');
+      }
 
-      const [items, donor] = await Promise.all([
-        this.validateItems(donationItems),
-        this.handleDonorCreation(donorInfo, qr.manager),
-      ]);
+      // 2) Validate incoming donation items (existence, active donation flag, etc.)
+      //    The result includes enriched targets (Project/Campaign)
+      const validatedItems = await this.validateItems(donationItems);
 
+      // 3) Create or update/attach a donor entity (if donorInfo is provided)
+      const donor = await this.handleDonorCreation(donorInfo, qr.manager);
+
+      // 4) Normalize items:
+      //    If multiple entries target the same project/campaign, merge them into one line item.
+      //    This yields cleaner accounting (one line per target) while still sharing one invoice.
+      type NormItem = {
+        amount: number;
+        projectId?: string;
+        campaignId?: string;
+        targetType: 'project' | 'campaign';
+        // keep the reference for clarity (not strictly needed after IDs are set)
+        targetEntity: Project | Campaign;
+      };
+
+      const normalizedItemsMap = new Map<string, NormItem>();
+
+      for (const it of validatedItems) {
+        // Target key: project => p:<id>, campaign => c:<id>
+        const key =
+          it.targetType === 'project'
+            ? `p:${it.targetEntity.id}`
+            : `c:${it.targetEntity.id}`;
+
+        const prev = normalizedItemsMap.get(key);
+        if (prev) {
+          // Merge amounts for same target (ensure number addition)
+          prev.amount += Number(it.amount);
+        } else {
+          normalizedItemsMap.set(key, {
+            amount: Number(it.amount),
+            projectId:
+              it.targetType === 'project' ? it.targetEntity.id : undefined,
+            campaignId:
+              it.targetType === 'campaign' ? it.targetEntity.id : undefined,
+            targetType: it.targetType,
+            targetEntity: it.targetEntity,
+          });
+        }
+      }
+
+      const normalizedItems = [...normalizedItemsMap.values()];
+
+      // 5) Persist one Donation row per normalized line item
       const donations = await this.createDonations(
-        items,
+        normalizedItems.map((ni) => ({
+          amount: ni.amount,
+          projectId: ni.projectId,
+          campaignId: ni.campaignId,
+          targetEntity: ni.targetEntity,
+          targetType: ni.targetType,
+        })),
         donor,
         currency,
         paymentMethod,
         qr.manager,
       );
-      const totalAmount = this.calcTotalAmount(donations);
-      const quantity = this.calcQuantity(donations);
 
+      // 6) Compute aggregated totals for the invoice
+      const totalAmount = this.calcTotalAmount(donations); // sum of line items
+      const quantity = this.calcQuantity(donations); // number of line items
+
+      // 7) Create a payment (single invoice) at the payment gateway
+      //    Use donor info if available; fall back to provided donorInfo or generic label
       const paymentResult = await this.myFatooraService.createPayment({
         amount: totalAmount,
         currency,
-        donationId: donations[0].id,
+        donationId: donations[0].id, // Client reference; could be any donationId among this batch
         description: `Donation for ${quantity} item(s)`,
         customerName: donor?.fullName || donorInfo?.fullName || 'Anonymous',
         customerEmail: donor?.email || donorInfo?.email,
@@ -311,35 +412,49 @@ export class DonationsService {
         paymentMethodId: paymentMethod,
       });
 
+      // 8) Persist the Payment entity locally, then wire all Donation rows to it
       const paymentEntity = this.paymentRepository.create({
-        transactionId: paymentResult.id,
-        amount: totalAmount,
+        transactionId: paymentResult.id, // MyFatoorah InvoiceId
+        amount: totalAmount, // keep as integer if you're enforcing no decimals
         currency,
         paymentMethod,
-        status: paymentResult.status,
+        status: paymentResult.status, // typically "pending" here
         paymentUrl: paymentResult.url,
         rawResponse: JSON.stringify(paymentResult.rawResponse),
       });
+
       const savedPayment = await qr.manager.save(paymentEntity);
 
-      donations.forEach((d) => {
+      // Link each donation to the saved payment and store the outbound gateway snapshot
+      for (const d of donations) {
         d.paymentId = savedPayment.id;
         d.payment = savedPayment;
-        d.paymentDetails = paymentResult;
-      });
+        d.paymentDetails = paymentResult; // raw create response for reference/debug
+      }
       await qr.manager.save(donations);
 
+      // 9) Commit the transaction — everything is durable now
       await qr.commitTransaction();
+
+      // 10) Return a clear payload including line items for FE to render the invoice details
       return {
         donationIds: donations.map((d) => d.id),
         paymentUrl: paymentResult.url,
-        totalAmount,
-        invoiceId: paymentResult.id,
+        totalAmount, // grand total (sum of line items)
+        invoiceId: paymentResult.id, // MyFatoorah InvoiceId
+        lineItems: donations.map((d) => ({
+          donationId: d.id,
+          amount: Number(d.amount),
+          projectId: d.projectId ?? null,
+          campaignId: d.campaignId ?? null,
+        })),
       };
     } catch (e) {
+      // Any error => rollback changes to keep DB consistent
       await qr.rollbackTransaction();
       throw e;
     } finally {
+      // Always release the query runner
       await qr.release();
     }
   }
@@ -444,6 +559,7 @@ export class DonationsService {
       order: { createdAt: 'DESC' },
     });
   }
+
   public async findOne(id: string) {
     const donation = await this.donationRepository.findOne({
       where: { id },
@@ -452,6 +568,7 @@ export class DonationsService {
     if (!donation) throw new NotFoundException(`Donation #${id} not found`);
     return donation;
   }
+
   public findByProject(projectId: string) {
     return this.donationRepository.find({
       where: { projectId },
@@ -459,6 +576,7 @@ export class DonationsService {
       order: { createdAt: 'DESC' },
     });
   }
+
   public findByCampaign(campaignId: string) {
     return this.donationRepository.find({
       where: { campaignId },
@@ -466,6 +584,15 @@ export class DonationsService {
       order: { createdAt: 'DESC' },
     });
   }
+
+  public findByPayment(paymentId: string) {
+    return this.donationRepository.find({
+      where: { paymentId },
+      relations: ['donor'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   public findByDonor(donorId: string) {
     return this.donationRepository.find({
       where: { donorId },
