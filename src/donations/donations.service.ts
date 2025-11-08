@@ -512,40 +512,107 @@ export class DonationsService {
     key: string,
     keyType: 'PaymentId' | 'InvoiceId' = 'InvoiceId',
   ) {
-    const qr = this.dataSource.createQueryRunner();
-    await qr.connect();
-    await qr.startTransaction();
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
+      if (!key) {
+        throw new BadRequestException('Key is required');
+      }
+
+      /**
+       * 1) Always fetch the latest status from MyFatoorah first.
+       *    This guarantees we rely on the gateway as the source of truth.
+       */
+      const { outcome, invoiceId, raw } =
+        await this.myFatooraService.getPaymentStatus(key, keyType);
+
+      if (!invoiceId) {
+        throw new BadRequestException(
+          'Unable to resolve InvoiceId from payment gateway response.',
+        );
+      }
+
+      /**
+       * 2) Find the local Payment record.
+       *
+       *    - If keyType is InvoiceId:
+       *        We stored MyFatoorah InvoiceId in `transactionId` when creating the payment.
+       *
+       *    - If keyType is PaymentId:
+       *        We try by `mfPaymentId` (MyFatoorah PaymentId) if already stored.
+       *        If not found, we fallback to `transactionId = invoiceId` resolved from MyFatoorah.
+       *
+       *    This makes the reconciliation resilient whether the FE uses InvoiceId or PaymentId.
+       */
       const payment = await this.paymentRepository.findOne({
         where:
           keyType === 'InvoiceId'
-            ? { transactionId: key }
-            : ({ mfPaymentId: key } as any),
+            ? { transactionId: invoiceId }
+            : ([
+                { mfPaymentId: key as any },
+                { transactionId: invoiceId },
+              ] as any),
       });
-      if (!payment)
-        throw new NotFoundException(`Payment not found for ${keyType}: ${key}`);
 
-      const { raw } = await this.myFatooraService.getPaymentStatus(
-        key,
-        keyType,
-      );
-      const txStatuses =
-        raw?.Payments?.map((p) => normalizeTxStatus(p?.PaymentStatus)) ?? [];
-      const outcome = deriveOutcome(raw?.InvoiceStatus, txStatuses);
+      if (!payment) {
+        throw new NotFoundException(
+          `Payment not found for ${keyType}: ${key} (InvoiceId=${invoiceId})`,
+        );
+      }
 
+      /**
+       * 3) Persist MyFatoorah PaymentId (mfPaymentId) if available and not set yet.
+       *    This improves future lookups using PaymentId directly.
+       */
+      const mfPaymentId =
+        raw?.Payments?.[0]?.PaymentId != null
+          ? String(raw.Payments[0].PaymentId)
+          : null;
+
+      if (mfPaymentId && !(payment as any).mfPaymentId) {
+        (payment as any).mfPaymentId = mfPaymentId;
+        await queryRunner.manager.save(payment);
+      }
+
+      /**
+       * 4) Apply the payment outcome to related donations & aggregates.
+       *
+       *    - If outcome = 'paid':
+       *        Mark donations as COMPLETED, set paidAt, update project/campaign totals.
+       *    - If outcome = 'failed':
+       *        Mark pending donations as FAILED.
+       *    - If outcome = 'pending':
+       *        Leave donations as-is.
+       *
+       *    applyPaymentOutcome is idempotent: calling it multiple times
+       *    for the same payment will not double-apply side effects.
+       */
       const { updatedDonations } = await this.applyPaymentOutcome(
         payment,
-        outcome,
-        qr.manager,
+        outcome as MfOutcome,
+        queryRunner.manager,
       );
 
-      await qr.commitTransaction();
-      return { outcome, paymentId: payment.id, updatedDonations };
-    } catch (e) {
-      await qr.rollbackTransaction();
-      throw e;
+      await queryRunner.commitTransaction();
+
+      /**
+       * 5) Return a normalized response for the frontend.
+       *    This is what your success page can consume directly.
+       */
+      return {
+        outcome,
+        paymentId: payment.id,
+        invoiceId: payment.transactionId,
+        mfPaymentId: (payment as any).mfPaymentId || mfPaymentId || null,
+        updatedDonations,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
     } finally {
-      await qr.release();
+      await queryRunner.release();
     }
   }
 

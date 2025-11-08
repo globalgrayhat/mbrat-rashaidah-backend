@@ -10,7 +10,7 @@ import {
   Patch,
   Query,
   BadRequestException,
-  ParseIntPipe,
+  // ParseIntPipe,
 } from '@nestjs/common';
 
 import { DonationsService } from './donations.service';
@@ -75,28 +75,33 @@ export class DonationsController {
     return this.donationsService.findByDonor(donorId);
   }
 
+  @Public()
   @Get('payment-status')
   getAndReconcile(
     @Query('key') key: string,
     @Query('type') type: 'InvoiceId' | 'PaymentId' = 'InvoiceId',
   ) {
-    if (!key) throw new BadRequestException('Missing key');
+    if (!key) {
+      throw new BadRequestException('Missing key');
+    }
     return this.donationsService.reconcilePayment(key, type);
   }
 
+  @Public()
   @Get('payment-status/invoice/:invoiceId')
-  getAndReconcileByInvoiceId(
-    @Param('invoiceId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
-    invoiceId: number,
-  ) {
-    return this.donationsService.reconcilePayment(
-      String(invoiceId),
-      'InvoiceId',
-    );
+  getAndReconcileByInvoiceId(@Param('invoiceId') invoiceId: string) {
+    if (!invoiceId) {
+      throw new BadRequestException('Missing invoiceId');
+    }
+    return this.donationsService.reconcilePayment(invoiceId, 'InvoiceId');
   }
 
+  @Public()
   @Get('payment-status/payment/:paymentId')
   getAndReconcileByPaymentId(@Param('paymentId') paymentId: string) {
+    if (!paymentId) {
+      throw new BadRequestException('Missing paymentId');
+    }
     return this.donationsService.reconcilePayment(paymentId, 'PaymentId');
   }
 
