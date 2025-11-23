@@ -22,8 +22,12 @@ import { Payment } from '../payment/entities/payment.entity';
 
 import { MyFatooraWebhookEvent } from '../common/interfaces/payment-service.interface';
 import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
-import { PaymentMethodEnum } from '../common/constants/payment.constant';
+import {
+  PaymentMethodEnum,
+  isSupportedPaymentMethod,
+} from '../common/constants/payment.constant';
 import { MyFatooraService } from '../payment/myfatoora.service';
+import { NotificationService } from '../common/services/notification.service';
 
 import {
   deriveOutcome,
@@ -48,10 +52,11 @@ export class DonationsService {
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     private readonly myFatooraService: MyFatooraService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   private isSupportedPaymentMethod(m: PaymentMethodEnum) {
-    return [PaymentMethodEnum.KNET, PaymentMethodEnum.VISA].includes(m);
+    return isSupportedPaymentMethod(m);
   }
   private calcTotalAmount(ds: Donation[]) {
     return ds.reduce((a, d) => a + Number(d.amount), 0);
@@ -64,16 +69,26 @@ export class DonationsService {
     donorInfo: CreateDonationDto['donorInfo'],
     em: EntityManager,
   ): Promise<Donor | null> {
-    if (!donorInfo) return null;
+    // Allow anonymous donations - return null if no donor info provided
+    if (!donorInfo) {
+      return null;
+    }
+
     const { userId, isAnonymous, fullName, email, phoneNumber } = donorInfo;
 
+    // Handle registered user donations
     if (userId) {
       const [donor, user] = await Promise.all([
         this.donorRepository.findOneBy({ userId }),
         this.userRepository.findOneBy({ id: userId }),
       ]);
+
+      if (!user) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+
       if (!donor) {
-        if (!user) throw new NotFoundException('User not found');
+        // Create new donor record for registered user
         const created = this.donorRepository.create({
           userId,
           fullName: user.fullName || user.username,
@@ -82,17 +97,42 @@ export class DonationsService {
         });
         return em.save(created);
       }
-      donor.isAnonymous = isAnonymous ?? donor.isAnonymous;
+
+      // Update existing donor's anonymous preference if provided
+      if (isAnonymous !== undefined) {
+        donor.isAnonymous = isAnonymous;
+      }
       return em.save(donor);
     }
 
+    // Handle anonymous/unregistered donor donations
+    // Allow donations with minimal info (just name, or completely anonymous)
+    const donorName = fullName?.trim() || 'Anonymous Donor';
+    const donorEmail = email?.trim() || undefined;
+    const donorPhone = phoneNumber?.trim() || undefined;
+
+    // Validate email format if provided
+    if (donorEmail && !this.isValidEmail(donorEmail)) {
+      throw new BadRequestException('Invalid email format');
+    }
+
+    // Create anonymous donor record
     const newDonor = this.donorRepository.create({
-      fullName: fullName || 'Anonymous Donor',
-      email,
-      phoneNumber,
-      isAnonymous: isAnonymous ?? false,
+      fullName: donorName,
+      email: donorEmail,
+      phoneNumber: donorPhone,
+      isAnonymous: isAnonymous ?? true, // Default to anonymous for unregistered donors
     });
+
     return em.save(newDonor);
+  }
+
+  /**
+   * Simple email validation
+   */
+  private isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   }
 
   private async validateItems(
@@ -309,13 +349,56 @@ export class DonationsService {
       c.donationCount += rec.count;
     }
 
-    await Promise.all([
-      toUpdate.length ? em.save(toUpdate) : undefined,
-      projects.length ? em.save(projects) : undefined,
-      campaigns.length ? em.save(campaigns) : undefined,
-    ]);
+    // Use bulk operations for better performance
+    const savePromises: Promise<any>[] = [];
+
+    if (toUpdate.length > 0) {
+      // Bulk update donations
+      savePromises.push(em.save(Donation, toUpdate));
+    }
+
+    if (projects.length > 0) {
+      // Bulk update projects
+      savePromises.push(em.save(Project, projects));
+    }
+
+    if (campaigns.length > 0) {
+      // Bulk update campaigns
+      savePromises.push(em.save(Campaign, campaigns));
+    }
+
+    if (savePromises.length > 0) {
+      await Promise.all(savePromises);
+    }
 
     return { updatedDonations: toUpdate.map((d) => d.id), outcome };
+  }
+
+  /**
+   * Send notification for payment status change
+   */
+  private async sendPaymentNotification(
+    payment: Payment,
+    outcome: MfOutcome,
+    donations: Donation[],
+  ): Promise<void> {
+    try {
+      const donor = donations[0]?.donor;
+      await this.notificationService.notifyPaymentStatusChange({
+        paymentId: payment.id,
+        invoiceId: payment.transactionId,
+        status: outcome,
+        amount: Number(payment.amount),
+        currency: payment.currency,
+        donorEmail: donor?.email,
+        donorName: donor?.fullName,
+        donorPhone: donor?.phoneNumber,
+        donationIds: donations.map((d) => d.id),
+      });
+    } catch (error) {
+      // Log but don't throw - notifications are non-critical
+      console.error('Failed to send payment notification:', error);
+    }
   }
 
   public async create(createDonationDto: CreateDonationDto) {
@@ -401,16 +484,59 @@ export class DonationsService {
 
       // 7) Create a payment (single invoice) at the payment gateway
       //    Use donor info if available; fall back to provided donorInfo or generic label
-      const paymentResult = await this.myFatooraService.createPayment({
-        amount: totalAmount,
-        currency,
-        donationId: donations[0].id, // Client reference; could be any donationId among this batch
-        description: `Donation for ${quantity} item(s)`,
-        customerName: donor?.fullName || donorInfo?.fullName || 'Anonymous',
-        customerEmail: donor?.email || donorInfo?.email,
-        customerMobile: donor?.phoneNumber || donorInfo?.phoneNumber,
-        paymentMethodId: paymentMethod,
-      });
+      //    For anonymous donors, use "Anonymous" as name but still allow optional email/phone
+      const customerName =
+        donor?.fullName ||
+        donorInfo?.fullName ||
+        (donorInfo?.isAnonymous ? 'Anonymous' : 'Anonymous Donor');
+      const customerEmail = donor?.email || donorInfo?.email;
+      const customerMobile = donor?.phoneNumber || donorInfo?.phoneNumber;
+
+      let paymentResult;
+      try {
+        paymentResult = await this.myFatooraService.createPayment({
+          amount: totalAmount,
+          currency,
+          donationId: donations[0].id, // Client reference; could be any donationId among this batch
+          description: `Donation for ${quantity} item(s)`,
+          customerName,
+          customerEmail,
+          customerMobile,
+          paymentMethodId: paymentMethod,
+        });
+      } catch (error) {
+        // If MyFatoorah API fails (401, etc.), provide a clear error message
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+
+        // Check if it's an authentication error
+        if (
+          errorMessage.includes('authentication failed') ||
+          errorMessage.includes('401') ||
+          errorMessage.includes('Unauthorized') ||
+          errorMessage.includes('API key')
+        ) {
+          throw new BadRequestException({
+            message:
+              'Payment gateway configuration error. MyFatoorah API is not properly configured.',
+            details: [
+              'Please ensure the following environment variables are set correctly:',
+              '- MYFATOORAH_API_KEY: Your MyFatoorah API key',
+              '- MYFATOORAH_API_URL: MyFatoorah API URL (e.g., https://apitest.myfatoorah.com)',
+              '- MYFATOORAH_CALLBACK_URL: Callback URL for successful payments',
+              '- MYFATOORAH_ERROR_URL: Error URL for failed payments',
+              '',
+              'For testing, you can use MyFatoorah test credentials.',
+              'Contact system administrator for assistance.',
+            ].join('\n'),
+            error: 'MyFatoorah authentication failed',
+            statusCode: 400,
+          });
+        }
+
+        // Re-throw other errors
+        throw error;
+      }
 
       // 8) Persist the Payment entity locally, then wire all Donation rows to it
       const paymentEntity = this.paymentRepository.create({
@@ -426,17 +552,28 @@ export class DonationsService {
       const savedPayment = await qr.manager.save(paymentEntity);
 
       // Link each donation to the saved payment and store the outbound gateway snapshot
+      // Use bulk update for better performance
       for (const d of donations) {
         d.paymentId = savedPayment.id;
         d.payment = savedPayment;
         d.paymentDetails = paymentResult; // raw create response for reference/debug
       }
-      await qr.manager.save(donations);
+      // Bulk update donations with payment info
+      await qr.manager.save(Donation, donations);
 
       // 9) Commit the transaction — everything is durable now
       await qr.commitTransaction();
 
-      // 10) Return a clear payload including line items for FE to render the invoice details
+      // 10) Automatically verify payment status after creation (non-blocking)
+      // This helps catch any immediate payment completions and ensures data consistency
+      this.verifyPaymentStatusAsync(paymentResult.id).catch((err) => {
+        console.error(
+          `Automatic payment verification failed for invoice ${paymentResult.id}:`,
+          err,
+        );
+      });
+
+      // 11) Return a clear payload including line items for FE to render the invoice details
       return {
         donationIds: donations.map((d) => d.id),
         paymentUrl: paymentResult.url,
@@ -452,10 +589,45 @@ export class DonationsService {
     } catch (e) {
       // Any error => rollback changes to keep DB consistent
       await qr.rollbackTransaction();
+
+      // Enhanced error logging for debugging
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      const errorStack = e instanceof Error ? e.stack : undefined;
+
+      console.error('Donation creation failed:', {
+        error: errorMessage,
+        stack: errorStack,
+        donationDto: {
+          paymentMethod: createDonationDto.paymentMethod,
+          currency: createDonationDto.currency,
+          itemCount: createDonationDto.donationItems?.length || 0,
+          hasDonorInfo: !!createDonationDto.donorInfo,
+        },
+      });
+
       throw e;
     } finally {
       // Always release the query runner
       await qr.release();
+    }
+  }
+
+  /**
+   * Verify payment status asynchronously (non-blocking)
+   * Used for automatic verification after payment creation
+   */
+  private async verifyPaymentStatusAsync(invoiceId: string): Promise<void> {
+    try {
+      // Wait a short delay to allow MyFatoorah to process the payment
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      await this.reconcilePayment(invoiceId, 'InvoiceId');
+    } catch (error) {
+      // Log but don't throw - this is a background verification
+      console.error(
+        `Background payment verification failed for invoice ${invoiceId}:`,
+        error,
+      );
     }
   }
 
@@ -468,10 +640,38 @@ export class DonationsService {
     await qr.connect();
     await qr.startTransaction();
     try {
-      if (!methods.every((m) => this.isSupportedPaymentMethod(m)))
-        throw new NotAcceptableException('Unsupported payment method');
-
+      // Extract payment method from webhook event if available
       const data = webhookEvent.Data ?? webhookEvent;
+      const paymentMethodId =
+        (data as any)?.Payments?.[0]?.PaymentMethodId ||
+        (data as any)?.PaymentMethodId;
+
+      // If payment method is provided in webhook, validate it
+      // Otherwise, accept all methods (since we now support all MyFatoorah methods)
+      if (paymentMethodId) {
+        if (
+          !this.isSupportedPaymentMethod(paymentMethodId as PaymentMethodEnum)
+        ) {
+          // Log warning but don't block - might be a new payment method
+          console.warn(
+            `Webhook received for potentially unsupported payment method: ${paymentMethodId}`,
+          );
+        }
+      }
+
+      // If methods array is provided and not empty, validate
+      if (methods.length > 0) {
+        const unsupported = methods.filter(
+          (m) => !this.isSupportedPaymentMethod(m),
+        );
+        if (unsupported.length > 0) {
+          throw new NotAcceptableException(
+            `Unsupported payment methods: ${unsupported.join(', ')}`,
+          );
+        }
+      }
+
+      // Reuse the data variable declared above
       const invoiceId = String((data as any).InvoiceId);
       if (!invoiceId)
         throw new BadRequestException('Missing invoice ID in webhook');
@@ -495,12 +695,37 @@ export class DonationsService {
 
       const outcome = deriveOutcome((data as any)?.InvoiceStatus, txStatuses);
 
-      await this.applyPaymentOutcome(payment, outcome, qr.manager);
+      const { updatedDonations } = await this.applyPaymentOutcome(
+        payment,
+        outcome,
+        qr.manager,
+      );
 
       await qr.commitTransaction();
-      return { success: true, outcome };
+
+      // Send notification asynchronously (don't await to avoid blocking)
+      const donations = await this.donationRepository.find({
+        where: { paymentId: payment.id },
+        relations: ['donor'],
+      });
+      this.sendPaymentNotification(payment, outcome, donations).catch((err) => {
+        console.error('Notification error (non-critical):', err);
+      });
+
+      return { success: true, outcome, updatedDonations };
     } catch (e) {
       await qr.rollbackTransaction();
+
+      // Enhanced error logging
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      const errorStack = e instanceof Error ? e.stack : undefined;
+
+      console.error('Webhook processing failed:', {
+        error: errorMessage,
+        stack: errorStack,
+        invoiceId: (webhookEvent.Data ?? webhookEvent)?.InvoiceId,
+      });
+
       throw e;
     } finally {
       await qr.release();
@@ -597,6 +822,19 @@ export class DonationsService {
 
       await queryRunner.commitTransaction();
 
+      // Send notification asynchronously
+      const donations = await this.donationRepository.find({
+        where: { paymentId: payment.id },
+        relations: ['donor'],
+      });
+      this.sendPaymentNotification(
+        payment,
+        outcome as MfOutcome,
+        donations,
+      ).catch((err) => {
+        console.error('Notification error (non-critical):', err);
+      });
+
       /**
        * 5) Return a normalized response for the frontend.
        *    This is what your success page can consume directly.
@@ -610,6 +848,19 @@ export class DonationsService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
+
+      // Enhanced error logging
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      console.error('Payment reconciliation failed:', {
+        error: errorMessage,
+        stack: errorStack,
+        key,
+        keyType,
+      });
+
       throw error;
     } finally {
       await queryRunner.release();

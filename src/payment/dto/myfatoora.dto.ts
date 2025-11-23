@@ -1,6 +1,6 @@
 /**
  * DTO for creating a payment invoice via MyFatoorah's SendPayment endpoint.
- * Reference: https://myfatoorah.readme.io/docs/sendpayment
+ * Reference: https://docs.myfatoorah.com/docs/payment-methods
  */
 
 export class SendPaymentDto {

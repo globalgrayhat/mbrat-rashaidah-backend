@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import axios, {
   AxiosError,
@@ -15,6 +16,7 @@ import {
   PaymentService,
   MyFatoorahResponseData,
   MyFatoorahGetPaymentStatusData,
+  MyFatoorahInitiatePaymentData,
 } from '../common/interfaces/payment-service.interface';
 import { AppConfigService } from '../config/config.service';
 import type { MFKeyType } from '../common/constants/payment.constant';
@@ -129,13 +131,36 @@ export class MyFatooraService implements PaymentService {
       return response.data.Data;
     } catch (err) {
       const axiosError = err as AxiosError;
+      const statusCode = axiosError.response?.status;
       const errorMessage =
         (axiosError.response?.data as { Message?: string })?.Message ||
         axiosError.message;
+
       console.error(
         `${operationName} error:`,
         axiosError.response?.data || axiosError.message,
       );
+
+      // Handle specific HTTP status codes
+      if (statusCode === 401) {
+        throw new UnauthorizedException(
+          `MyFatoorah authentication failed. Please check your API key configuration. Original error: ${errorMessage}`,
+        );
+      }
+
+      if (statusCode === 403) {
+        throw new UnauthorizedException(
+          `MyFatoorah access forbidden. Please verify your API permissions. Original error: ${errorMessage}`,
+        );
+      }
+
+      if (statusCode === 404) {
+        throw new BadRequestException(
+          `MyFatoorah endpoint not found. Please verify the API URL configuration. Original error: ${errorMessage}`,
+        );
+      }
+
+      // For other errors, throw InternalServerErrorException
       throw new InternalServerErrorException(
         `Failed to ${operationName}: ${errorMessage}`,
       );
@@ -224,5 +249,43 @@ export class MyFatooraService implements PaymentService {
 
   async getPaymentStatusByPaymentId(paymentId: string) {
     return this.getPaymentStatus(paymentId, 'PaymentId');
+  }
+
+  /**
+   * InitiatePayment endpoint - Get available payment methods with service charges
+   * Reference: https://docs.myfatoorah.com/docs/gateway-integration#initiate-payment
+   */
+  async initiatePayment(
+    invoiceAmount: number,
+    currencyIso: string,
+  ): Promise<MyFatoorahInitiatePaymentData> {
+    if (!invoiceAmount || invoiceAmount <= 0) {
+      throw new BadRequestException('InvoiceAmount must be greater than 0');
+    }
+    if (!currencyIso || currencyIso.length !== 3) {
+      throw new BadRequestException(
+        'CurrencyIso must be a valid 3-letter ISO code',
+      );
+    }
+
+    const requestBody = {
+      InvoiceAmount: invoiceAmount,
+      CurrencyIso: currencyIso,
+    };
+
+    const data = await this.request<MyFatoorahInitiatePaymentData>(
+      'post',
+      'InitiatePayment',
+      requestBody,
+      'Initiate MyFatoorah payment',
+    );
+
+    if (!data.PaymentMethods || !Array.isArray(data.PaymentMethods)) {
+      throw new InternalServerErrorException(
+        'InitiatePayment failed: Missing or invalid PaymentMethods array.',
+      );
+    }
+
+    return data;
   }
 }

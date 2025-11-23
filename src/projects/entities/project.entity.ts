@@ -42,10 +42,18 @@ export class Project {
   @Column({ type: 'timestamp', nullable: true })
   endDate?: Date;
 
-  @Column('decimal', { precision: 10, scale: 0 })
+  /**
+   * Target fundraising amount.
+   * Using precision 15 and scale 3 to support KWD and other currencies with up to 3 decimal places.
+   */
+  @Column('decimal', { precision: 15, scale: 3 })
   targetAmount: number;
 
-  @Column('decimal', { precision: 10, scale: 0, default: 1 })
+  /**
+   * Current amount raised.
+   * Using precision 15 and scale 3 to support KWD and other currencies with up to 3 decimal places.
+   */
+  @Column('decimal', { precision: 15, scale: 3, default: 0 })
   currentAmount: number;
 
   @ManyToOne(() => Category, { eager: true })
@@ -102,7 +110,11 @@ export class Project {
   @Column({ default: true })
   isTargetAmountActive: boolean;
 
-  @Column('decimal', { precision: 10, scale: 0, nullable: true })
+  /**
+   * Optional specific donation goal.
+   * Using precision 15 and scale 3 to support KWD and other currencies with up to 3 decimal places.
+   */
+  @Column('decimal', { precision: 15, scale: 3, nullable: true })
   donationGoal?: number;
 
   @CreateDateColumn({ type: 'timestamp' })

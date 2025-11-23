@@ -20,6 +20,7 @@ import { Role } from '../common/constants/roles.constant';
 import { ProjectStatus } from '../common/constants/project.constant';
 import { ProjectExistsPipe } from '../common/pipes/projectExists.pipe'; // Import the new pipe
 import { User } from '../user/entities/user.entity';
+import { Public } from '../common/decorators/public.decorator';
 @Controller('projects')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProjectsController {
@@ -39,14 +40,16 @@ export class ProjectsController {
     });
   }
 
+  @Public()
   @Get()
   findAll() {
     return this.projectsService.findAll();
   }
 
+  @Public()
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe, ProjectExistsPipe) id: string) {
-    // Add ProjectExistsPipe
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    // Service will handle NotFoundException if project doesn't exist
     return this.projectsService.findOne(id);
   }
 
@@ -66,26 +69,31 @@ export class ProjectsController {
     return this.projectsService.remove(id);
   }
 
+  @Public()
   @Get('category/:categoryId')
   findByCategory(@Param('categoryId') categoryId: string) {
     return this.projectsService.findByCategory(categoryId);
   }
 
+  @Public()
   @Get('country/:countryId')
   findByCountry(@Param('countryId') countryId: string) {
     return this.projectsService.findByCountry(countryId);
   }
 
+  @Public()
   @Get('status/:status')
   findProjectList(@Param('status') status: ProjectStatus) {
     return this.projectsService.findProjectList(status);
   }
 
+  @Public()
   @Get('details/:projectId')
   findProjectDetails(@Param('projectId', ParseUUIDPipe) projectId: string) {
     return this.projectsService.findProjectDetails(projectId);
   }
 
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @Get('stats/summary')
   getProjectStats() {
     return this.projectsService.getProjectStats();

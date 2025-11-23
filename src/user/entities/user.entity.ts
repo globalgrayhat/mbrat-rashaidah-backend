@@ -12,11 +12,11 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ length: 255 })
-  fullName: string;
+  @Column({ length: 255, nullable: true })
+  fullName?: string;
 
-  @Column({ unique: true, length: 255 })
-  username: string;
+  @Column({ unique: true, length: 255, nullable: true })
+  username?: string;
 
   @Column({ unique: true, length: 255 })
   email: string;

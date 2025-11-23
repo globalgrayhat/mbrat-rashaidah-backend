@@ -10,6 +10,7 @@ import { DataSource, Repository, ObjectLiteral } from 'typeorm';
 
 import { DonationsService } from './donations.service';
 import { MyFatooraService } from '../payment/myfatoora.service';
+import { NotificationService } from '../common/services/notification.service';
 
 import { Donation } from './entities/donation.entity';
 import { Project } from '../projects/entities/project.entity';
@@ -38,6 +39,7 @@ describe('DonationsService - reconcilePayment', () => {
   let service: DonationsService;
   let myFatooraService: MockType<MyFatooraService>;
   let paymentRepository: MockType<Repository<Payment>>;
+  let donationRepository: MockType<Repository<Donation>>;
 
   const queryRunnerMock = {
     connect: jest.fn(),
@@ -57,6 +59,11 @@ describe('DonationsService - reconcilePayment', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
+    // Suppress console.error for expected error cases in tests
+    jest.spyOn(console, 'error').mockImplementation(() => {
+      // Suppress expected error logs during tests
+    });
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DonationsService,
@@ -64,6 +71,12 @@ describe('DonationsService - reconcilePayment', () => {
           provide: MyFatooraService,
           useValue: {
             getPaymentStatus: jest.fn(),
+          },
+        },
+        {
+          provide: NotificationService,
+          useValue: {
+            notifyPaymentStatusChange: jest.fn(),
           },
         },
         { provide: DataSource, useValue: dataSourceMock },
@@ -98,6 +111,7 @@ describe('DonationsService - reconcilePayment', () => {
     service = module.get<DonationsService>(DonationsService);
     myFatooraService = module.get(MyFatooraService) as any;
     paymentRepository = module.get(getRepositoryToken(Payment));
+    donationRepository = module.get(getRepositoryToken(Donation));
 
     jest
       .spyOn<any, any>(service as any, 'applyPaymentOutcome')
@@ -136,6 +150,9 @@ describe('DonationsService - reconcilePayment', () => {
       transactionId: '12345',
     };
     (paymentRepository.findOne as jest.Mock).mockResolvedValue(payment);
+
+    // Mock donation repository for notification
+    (donationRepository.find as jest.Mock).mockResolvedValue([]);
 
     const result = await service.reconcilePayment('12345', 'InvoiceId');
 
@@ -200,6 +217,7 @@ describe('DonationsService - reconcilePayment', () => {
       transactionId: 'INV-777',
     };
     (paymentRepository.findOne as jest.Mock).mockResolvedValue(payment);
+    (donationRepository.find as jest.Mock).mockResolvedValue([]);
 
     const result = await service.reconcilePayment('PAY-777', 'PaymentId');
 
@@ -236,5 +254,10 @@ describe('DonationsService - reconcilePayment', () => {
 
     expect(queryRunnerMock.rollbackTransaction).toHaveBeenCalled();
     expect(queryRunnerMock.release).toHaveBeenCalled();
+  });
+
+  afterEach(() => {
+    // Restore console.error after each test
+    jest.restoreAllMocks();
   });
 });

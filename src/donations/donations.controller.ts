@@ -43,6 +43,7 @@ export class DonationsController {
     private readonly donorsService: DonorsService,
   ) {}
 
+  @Public()
   @Post()
   createDonation(@Body() dto: CreateDonationDto) {
     return this.donationsService.create(dto);

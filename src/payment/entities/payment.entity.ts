@@ -4,9 +4,8 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  // OneToOne,
-  // JoinColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { Donation } from '../../donations/entities/donation.entity';
 import { PaymentMethodEnum } from '../../common/constants/payment.constant';
@@ -15,6 +14,10 @@ import { PaymentMethodEnum } from '../../common/constants/payment.constant';
  * Represents a payment transaction in the system.
  */
 @Entity('payments')
+@Index(['status'])
+@Index(['paymentMethod'])
+@Index(['currency'])
+@Index(['createdAt'])
 export class Payment {
   /**
    * The unique identifier for the payment (UUID).
@@ -24,8 +27,9 @@ export class Payment {
 
   /**
    * The amount of the payment.
+   * Using precision 15 and scale 3 to support KWD and other currencies with up to 3 decimal places.
    */
-  @Column('decimal', { precision: 10, scale: 0 })
+  @Column('decimal', { precision: 15, scale: 3 })
   amount: number;
 
   /**
@@ -62,6 +66,7 @@ export class Payment {
    */
   @Column({ length: 50 })
   status: string;
+
 
   /**
    * Stores the raw JSON response from the payment gateway for debugging and logging purposes.

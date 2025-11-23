@@ -26,6 +26,38 @@ export interface PaymentResult {
 
 export interface PaymentService {
   createPayment(payload: PaymentPayload): Promise<PaymentResult>;
+  initiatePayment?(
+    invoiceAmount: number,
+    currencyIso: string,
+  ): Promise<MyFatoorahInitiatePaymentData>;
+}
+
+/**
+ * Payment method information from MyFatoorah InitiatePayment API
+ */
+export interface MyFatoorahPaymentMethod {
+  PaymentMethodId: number;
+  PaymentMethodCode: string;
+  PaymentMethodEn: string;
+  PaymentMethodAr: string;
+  IsDirectPayment: boolean;
+  ServiceCharge: number;
+  TotalAmount: number;
+  CurrencyIso: string;
+  ImageUrl?: string;
+  CurrencyId?: number;
+  PaymentCurrencyCode?: string;
+  PaymentCurrencyEn?: string;
+  PaymentCurrencyAr?: string;
+  MinLimit?: number;
+  MaxLimit?: number;
+}
+
+/**
+ * Response data from InitiatePayment endpoint
+ */
+export interface MyFatoorahInitiatePaymentData {
+  PaymentMethods: MyFatoorahPaymentMethod[];
 }
 
 // Specific types for webhook events to improve type safety

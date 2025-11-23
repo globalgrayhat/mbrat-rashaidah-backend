@@ -23,6 +23,7 @@ import { ContinentsModule } from './continents/continents.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { DonorModule } from './donor/donor.module';
 import { DonationsModule } from './donations/donations.module';
+import { PaymentModule } from './payment/payment.module';
 
 // Database entity imports
 import { User } from './user/entities/user.entity';
@@ -92,6 +93,7 @@ import { Payment } from './payment/entities/payment.entity';
     CampaignsModule,
     DonorModule,
     DonationsModule,
+    PaymentModule,
   ],
 
   // Main app controller

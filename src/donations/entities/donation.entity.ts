@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Project } from '../../projects/entities/project.entity';
 import { Campaign } from '../../campaigns/entities/campaign.entity';
@@ -15,11 +16,21 @@ import { DonationStatusEnum } from '../../common/constants/donationStatus.consta
 import { PaymentMethodEnum } from '../../common/constants/payment.constant';
 
 @Entity('donations')
+@Index(['paymentId'])
+@Index(['projectId'])
+@Index(['campaignId'])
+@Index(['donorId'])
+@Index(['status'])
+@Index(['createdAt'])
 export class Donation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column('decimal', { precision: 10, scale: 3 })
+  /**
+   * The donation amount.
+   * Using precision 15 and scale 3 to support KWD and other currencies with up to 3 decimal places.
+   */
+  @Column('decimal', { precision: 15, scale: 3 })
   amount: number;
 
   @Column({ length: 3 })

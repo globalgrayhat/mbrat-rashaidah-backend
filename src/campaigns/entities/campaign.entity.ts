@@ -59,15 +59,17 @@ export class Campaign {
   endDate?: Date;
 
   /**
-   * Target fundraising amount
+   * Target fundraising amount.
+   * Using precision 15 and scale 3 to support KWD and other currencies with up to 3 decimal places.
    */
-  @Column('decimal', { precision: 10, scale: 0 })
+  @Column('decimal', { precision: 15, scale: 3 })
   targetAmount: number;
 
   /**
-   * Current amount raised
+   * Current amount raised.
+   * Using precision 15 and scale 3 to support KWD and other currencies with up to 3 decimal places.
    */
-  @Column('decimal', { precision: 10, scale: 0, default: 0 })
+  @Column('decimal', { precision: 15, scale: 3, default: 0 })
   currentAmount: number;
 
   /**
@@ -141,9 +143,10 @@ export class Campaign {
   isTargetAmountActive: boolean;
 
   /**
-   * Optional specific donation goal
+   * Optional specific donation goal.
+   * Using precision 15 and scale 3 to support KWD and other currencies with up to 3 decimal places.
    */
-  @Column('decimal', { precision: 10, scale: 0, nullable: true })
+  @Column('decimal', { precision: 15, scale: 3, nullable: true })
   donationGoal?: number;
 
   /**
