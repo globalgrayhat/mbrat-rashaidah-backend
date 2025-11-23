@@ -3,6 +3,7 @@ import {
   InternalServerErrorException,
   BadRequestException,
   UnauthorizedException,
+  NotFoundException,
 } from '@nestjs/common';
 import axios, {
   AxiosError,
@@ -119,8 +120,22 @@ export class MyFatooraService implements PaymentService {
       }>(config);
 
       if (!response.data?.IsSuccess) {
-        throw new InternalServerErrorException(
-          `${operationName} failed: ${response.data?.Message}`,
+        const errorMessage = response.data?.Message || 'Unknown error';
+        
+        // Handle "No data match" as NotFoundException (payment/invoice not found)
+        if (
+          errorMessage.toLowerCase().includes('no data match') ||
+          errorMessage.toLowerCase().includes('not found') ||
+          errorMessage.toLowerCase().includes('does not exist')
+        ) {
+          throw new NotFoundException(
+            `Payment not found in MyFatoorah: ${errorMessage}`,
+          );
+        }
+        
+        // For other business logic errors, throw BadRequestException
+        throw new BadRequestException(
+          `${operationName} failed: ${errorMessage}`,
         );
       }
       if (response.data?.Data == null) {

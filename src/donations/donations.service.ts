@@ -750,8 +750,44 @@ export class DonationsService {
        * 1) Always fetch the latest status from MyFatoorah first.
        *    This guarantees we rely on the gateway as the source of truth.
        */
-      const { outcome, invoiceId, raw } =
-        await this.myFatooraService.getPaymentStatus(key, keyType);
+      let outcome: MfOutcome;
+      let invoiceId: string;
+      let raw: any;
+
+      try {
+        const statusResult =
+          await this.myFatooraService.getPaymentStatus(key, keyType);
+        outcome = statusResult.outcome;
+        invoiceId = statusResult.invoiceId;
+        raw = statusResult.raw;
+      } catch (error) {
+        // If payment not found in MyFatoorah, check if we have it locally
+        if (error instanceof NotFoundException) {
+          // Try to find payment locally first
+          const whereCondition =
+            keyType === 'InvoiceId'
+              ? { transactionId: key }
+              : { mfPaymentId: key as any };
+          const localPayment = await this.paymentRepository.findOne({
+            where: whereCondition as any,
+          });
+
+          if (localPayment) {
+            // Payment exists locally but not in MyFatoorah
+            // This could mean the invoice expired or was deleted
+            throw new NotFoundException(
+              `Payment ${key} exists locally but not found in MyFatoorah. The invoice may have expired or been deleted.`,
+            );
+          }
+
+          // Payment doesn't exist in either place
+          throw new NotFoundException(
+            `Payment not found for ${keyType}: ${key}. Please verify the payment ID.`,
+          );
+        }
+        // Re-throw other errors
+        throw error;
+      }
 
       if (!invoiceId) {
         throw new BadRequestException(
