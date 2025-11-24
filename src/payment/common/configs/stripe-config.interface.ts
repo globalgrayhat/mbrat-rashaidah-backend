@@ -78,4 +78,3 @@ export interface IStripeConfigAdapter {
   stripeSuccessUrl?: string;
   stripeCancelUrl?: string;
 }
-

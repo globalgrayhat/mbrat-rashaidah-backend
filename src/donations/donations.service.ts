@@ -7,6 +7,9 @@ import {
   NotAcceptableException,
   NotFoundException,
   BadRequestException,
+  Inject,
+  Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
@@ -27,6 +30,7 @@ import { DonationStatusEnum } from '../common/constants/donationStatus.constant'
 // and stored as strings/numbers to support any provider's payment method IDs
 import { PaymentService } from '../payment/payment.service';
 import { NotificationService } from '../common/services/notification.service';
+import { PaymentReconciliationService } from '../payment/common/cron/payment-reconciliation.cron';
 
 import {
   deriveOutcome,
@@ -52,6 +56,11 @@ export class DonationsService {
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     private readonly paymentService: PaymentService, // Use PaymentService for multi-provider support
     private readonly notificationService: NotificationService,
+    // Optional: PaymentReconciliationService for registering new payments in cache
+    // Using forwardRef and Optional to avoid circular dependency issues
+    @Optional()
+    @Inject(forwardRef(() => PaymentReconciliationService))
+    private readonly reconciliationService?: PaymentReconciliationService,
   ) {}
 
   /**
@@ -616,6 +625,24 @@ export class DonationsService {
 
       // 9) Commit the transaction — everything is durable now
       await qr.commitTransaction();
+
+      // 9.5) Register payment in temporary cache for discovery-time tracking
+      // This allows reconciliation to track payments from discovery time, not just creation time
+      if (this.reconciliationService) {
+        try {
+          this.reconciliationService.registerNewPayment(
+            savedPayment.id,
+            savedPayment.transactionId,
+            savedPayment.status,
+          );
+        } catch (error) {
+          // Log but don't fail - cache registration is optional
+          console.warn(
+            `Failed to register payment ${savedPayment.id} in reconciliation cache:`,
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
 
       // 10) Automatically verify payment status after creation (non-blocking)
       // This helps catch any immediate payment completions and ensures data consistency

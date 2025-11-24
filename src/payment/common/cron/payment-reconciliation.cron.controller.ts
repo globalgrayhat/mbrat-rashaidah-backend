@@ -4,7 +4,7 @@
  * Provides endpoints for manual payment reconciliation and monitoring.
  * The automatic reconciliation runs via cron job every 3 minutes.
  */
-import { Controller, Get, Post, Param, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Logger } from '@nestjs/common';
 import { PaymentReconciliationService } from './payment-reconciliation.cron';
 
 @Controller('payment-reconciliation')
@@ -53,10 +53,47 @@ export class PaymentReconciliationController {
   @Get('stats')
   async getStats() {
     const stats = await this.reconciliationService.getPendingPaymentsStats();
+    const cacheStats = this.reconciliationService.getCacheStats();
     return {
       success: true,
       timeoutMinutes: this.reconciliationService.getPendingTimeoutMinutes(),
       ...stats,
+      cache: cacheStats,
+    };
+  }
+
+  /**
+   * Register a newly discovered payment in temporary cache
+   * POST /payment-reconciliation/register
+   * Body: { paymentId: string, transactionId: string, status?: string }
+   */
+  @Post('register')
+  registerPayment(
+    @Body()
+    body: {
+      paymentId: string;
+      transactionId: string;
+      status?: string;
+    },
+  ) {
+    if (!body.paymentId || !body.transactionId) {
+      return {
+        success: false,
+        message: 'paymentId and transactionId are required',
+      };
+    }
+
+    this.reconciliationService.registerNewPayment(
+      body.paymentId,
+      body.transactionId,
+      body.status || 'pending',
+    );
+
+    return {
+      success: true,
+      message: `Payment ${body.paymentId} registered in temporary cache`,
+      paymentId: body.paymentId,
+      transactionId: body.transactionId,
     };
   }
 }
