@@ -31,8 +31,7 @@ import { CampaignExistsPipe } from '../common/pipes/campaignExists.pipe';
 import { DonorExistsPipe } from '../common/pipes/donorExists.pipe';
 import { DonationExistsPipe } from '../common/pipes/donationExists.pipe';
 
-import { MyFatooraWebhookEvent } from '../common/interfaces/payment-service.interface';
-import { PaymentMethodEnum } from '../common/constants/payment.constant';
+import { MyFatooraWebhookEvent } from '../payment/common/interfaces/payment-service.interface';
 import { Public } from '../common/decorators/public.decorator';
 
 @Controller('donations')
@@ -109,7 +108,10 @@ export class DonationsController {
   @Public()
   @Post('payment/webhook')
   myFatoorahWebhook(@Body() body: MyFatooraWebhookEvent) {
-    const supported = [PaymentMethodEnum.KNET, PaymentMethodEnum.VISA];
+    // Payment methods are provider-specific and validated by the provider
+    // Pass empty array to accept any payment method from the provider
+    // The provider (MyFatoorah, Stripe, PayMob, etc.) handles validation
+    const supported: string[] = [];
     return this.donationsService.handlePaymentWebhook(supported, body);
   }
 

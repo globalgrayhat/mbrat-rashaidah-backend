@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -7,8 +8,7 @@ import {
   OneToMany,
   Index,
 } from 'typeorm';
-import { Donation } from '../../donations/entities/donation.entity';
-import { PaymentMethodEnum } from '../../common/constants/payment.constant';
+import { Donation } from '../../../donations/entities/donation.entity';
 
 /**
  * Represents a payment transaction in the system.
@@ -40,12 +40,12 @@ export class Payment {
 
   /**
    * The method used for the payment (e.g., KNET, VISA).
+   * Stored as string to support any payment method ID from providers
+   * (MyFatoorah, Stripe, PayMob, etc.) without being restricted to a fixed enum.
+   * This makes the system flexible and provider-agnostic.
    */
-  @Column({
-    type: 'enum',
-    enum: PaymentMethodEnum,
-  })
-  paymentMethod: PaymentMethodEnum;
+  @Column({ type: 'varchar', length: 50 })
+  paymentMethod: string;
 
   /**
    * The unique transaction ID from the payment gateway.

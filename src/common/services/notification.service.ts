@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Injectable, Logger } from '@nestjs/common';
 import { AppConfigService } from '../../config/config.service';
 
@@ -107,7 +109,9 @@ export class NotificationService {
   /**
    * Notify admin about payment status change
    */
-  private async notifyAdmin(payload: PaymentNotificationPayload): Promise<void> {
+  private async notifyAdmin(
+    payload: PaymentNotificationPayload,
+  ): Promise<void> {
     const { status, paymentId, invoiceId, amount, currency, donorName } =
       payload;
 
@@ -156,4 +160,3 @@ Thank you for your generous contribution!
     return receipt;
   }
 }
-

@@ -1,8 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {
   IsUUID,
   IsNumber,
   IsString,
-  IsEnum,
   IsOptional,
   IsNotEmpty,
   ValidateNested,
@@ -10,8 +10,7 @@ import {
   Min,
   // IsEmail,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { PaymentMethodEnum } from '../../common/constants/payment.constant';
+import { Type, Transform } from 'class-transformer';
 import { CreateDonorDto } from '../../donor/dto/create-donor.dto';
 
 /**
@@ -43,8 +42,17 @@ export class DonationItemDto {
  * DTO for creating a new donation request, supporting multiple donation targets.
  */
 export class CreateDonationDto {
-  @IsEnum(PaymentMethodEnum)
-  paymentMethod: PaymentMethodEnum;
+  /**
+   * Payment method ID from the payment provider (e.g., MyFatoorah, Stripe, PayMob).
+   * Can be provided as number or string by the client; we normalize it to string.
+   * Stored as string in database to support any provider's payment method IDs.
+   */
+  @IsNotEmpty()
+  @IsString()
+  @Transform(({ value }) =>
+    value !== undefined && value !== null ? String(value) : value,
+  )
+  paymentMethod: string;
 
   @IsString()
   @IsNotEmpty()

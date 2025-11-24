@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   Controller,
   Post,
@@ -6,8 +9,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { DonationsService } from '../donations/donations.service';
-import { isSupportedPaymentMethod } from '../common/constants/payment.constant';
-import { MyFatooraWebhookEvent } from '../common/interfaces/payment-service.interface';
+// Payment method validation is no longer needed - providers handle their own payment methods
+import { MyFatooraWebhookEvent } from './common/interfaces/payment-service.interface';
 
 @Controller('webhooks')
 export class WebhookController {
@@ -29,17 +32,15 @@ export class WebhookController {
         (data as any)?.Payments?.[0]?.PaymentMethodId ||
         (data as any)?.PaymentMethodId;
 
-      // Validate payment method if provided
-      if (paymentMethodId && !isSupportedPaymentMethod(paymentMethodId)) {
-        this.logger.warn(
-          `Unsupported payment method ${paymentMethodId} in webhook, but processing anyway`,
+      // Log payment method for monitoring
+      if (paymentMethodId) {
+        this.logger.debug(
+          `Webhook received for payment method: ${paymentMethodId}`,
         );
       }
 
-      // Get all supported payment methods dynamically
-      // Since we now support all MyFatoorah methods, we pass an empty array
-      // and let the service validate based on the actual payment method in the event
-      const paymentMethods: number[] = [];
+      // Pass empty array - payment methods are provider-specific and validated by provider
+      const paymentMethods: string[] = [];
 
       await this.donationsService.handlePaymentWebhook(paymentMethods, event);
 

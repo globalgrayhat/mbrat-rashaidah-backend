@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 
 export interface TransactionLogEntry {
   transactionId: string;
-  type: 'payment_created' | 'payment_verified' | 'payment_webhook' | 'payment_reconciled';
+  type:
+    | 'payment_created'
+    | 'payment_verified'
+    | 'payment_webhook'
+    | 'payment_reconciled';
   status: 'success' | 'failed' | 'pending';
   amount?: number;
   currency?: string;
@@ -72,7 +76,9 @@ export class TransactionLoggerService {
   /**
    * Extract structured context for logging
    */
-  private extractLogContext(entry: TransactionLogEntry): Record<string, unknown> {
+  private extractLogContext(
+    entry: TransactionLogEntry,
+  ): Record<string, unknown> {
     return {
       transactionId: entry.transactionId,
       type: entry.type,
@@ -169,4 +175,3 @@ export class TransactionLoggerService {
     });
   }
 }
-

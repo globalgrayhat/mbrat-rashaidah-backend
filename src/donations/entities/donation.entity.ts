@@ -11,9 +11,8 @@ import {
 import { Project } from '../../projects/entities/project.entity';
 import { Campaign } from '../../campaigns/entities/campaign.entity';
 import { Donor } from '../../donor/entities/donor.entity';
-import { Payment } from '../../payment/entities/payment.entity';
+import { Payment } from '../../payment/common/entities/payment.entity';
 import { DonationStatusEnum } from '../../common/constants/donationStatus.constant';
-import { PaymentMethodEnum } from '../../common/constants/payment.constant';
 
 @Entity('donations')
 @Index(['paymentId'])
@@ -36,11 +35,14 @@ export class Donation {
   @Column({ length: 3 })
   currency: string;
 
-  @Column({
-    type: 'enum',
-    enum: PaymentMethodEnum,
-  })
-  paymentMethod: PaymentMethodEnum;
+  /**
+   * The payment method used for the donation.
+   * Stored as string to support any payment method ID from providers
+   * (MyFatoorah, Stripe, PayMob, etc.) without being restricted to a fixed enum.
+   * This makes the system flexible and provider-agnostic.
+   */
+  @Column({ type: 'varchar', length: 50 })
+  paymentMethod: string;
 
   @Column({
     type: 'enum',

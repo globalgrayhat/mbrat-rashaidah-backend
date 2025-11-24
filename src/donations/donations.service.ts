@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -18,21 +19,19 @@ import { Project } from '../projects/entities/project.entity';
 import { Campaign } from '../campaigns/entities/campaign.entity';
 import { Donor } from '../donor/entities/donor.entity';
 import { User } from '../user/entities/user.entity';
-import { Payment } from '../payment/entities/payment.entity';
+import { Payment } from '../payment/common/entities/payment.entity';
 
-import { MyFatooraWebhookEvent } from '../common/interfaces/payment-service.interface';
+import { MyFatooraWebhookEvent } from '../payment/common/interfaces/payment-service.interface';
 import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
-import {
-  PaymentMethodEnum,
-  isSupportedPaymentMethod,
-} from '../common/constants/payment.constant';
-import { MyFatooraService } from '../payment/myfatoora.service';
+// PaymentMethodEnum is no longer used - payment methods are provider-specific
+// and stored as strings/numbers to support any provider's payment method IDs
+import { PaymentService } from '../payment/payment.service';
 import { NotificationService } from '../common/services/notification.service';
 
 import {
   deriveOutcome,
   normalizeTxStatus,
-} from '../common/utils/mf-status.util';
+} from '../payment/common/utils/mf-status.util';
 
 type MfOutcome = 'paid' | 'failed' | 'pending';
 
@@ -51,12 +50,61 @@ export class DonationsService {
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(User) private readonly userRepository: Repository<User>,
-    private readonly myFatooraService: MyFatooraService,
+    private readonly paymentService: PaymentService, // Use PaymentService for multi-provider support
     private readonly notificationService: NotificationService,
   ) {}
 
-  private isSupportedPaymentMethod(m: PaymentMethodEnum) {
-    return isSupportedPaymentMethod(m);
+  /**
+   * Check if a payment method is supported.
+   * Since payment methods are provider-specific and can change,
+   * we accept any payment method ID from the provider.
+   * This method always returns true to allow flexibility.
+   */
+  private isSupportedPaymentMethod(m: number | string): boolean {
+    // Accept any payment method ID - providers handle validation
+    return true;
+  }
+
+  /**
+   * Get provider-specific configuration error message
+   * @param providerName Provider name (myfatoorah, stripe, paymob)
+   * @returns Configuration error message
+   */
+  private getProviderConfigMessage(providerName: string): string {
+    const configs: Record<string, string[]> = {
+      myfatoorah: [
+        'Please ensure the following environment variables are set correctly:',
+        '- MYFATOORAH_API_KEY: Your MyFatoorah API key',
+        '- MYFATOORAH_API_URL: MyFatoorah API URL (e.g., https://apitest.myfatoorah.com)',
+        '- MYFATOORAH_CALLBACK_URL: Callback URL for successful payments',
+        '- MYFATOORAH_ERROR_URL: Error URL for failed payments',
+        '',
+        'For testing, you can use MyFatoorah test credentials.',
+      ],
+      stripe: [
+        'Please ensure the following environment variables are set correctly:',
+        '- STRIPE_SECRET_KEY: Your Stripe secret key',
+        '- STRIPE_WEBHOOK_SECRET: Your Stripe webhook secret (optional)',
+        '',
+        'For testing, you can use Stripe test keys.',
+      ],
+      paymob: [
+        'Please ensure the following environment variables are set correctly:',
+        '- PAYMOB_API_KEY: Your PayMob API key (legacy)',
+        '- PAYMOB_SECRET_KEY: Your PayMob secret key (Intention API)',
+        '- PAYMOB_INTEGRATION_ID: Your PayMob integration ID',
+        '',
+        'For testing, you can use PayMob test credentials.',
+      ],
+    };
+
+    const config = configs[providerName] || [
+      `Please configure ${providerName} API credentials in environment variables.`,
+    ];
+
+    return [...config, 'Contact system administrator for assistance.'].join(
+      '\n',
+    );
   }
   private calcTotalAmount(ds: Donation[]) {
     return ds.reduce((a, d) => a + Number(d.amount), 0);
@@ -254,14 +302,14 @@ export class DonationsService {
     }[],
     donor: Donor | null,
     currency: string,
-    paymentMethod: PaymentMethodEnum,
+    paymentMethod: string,
     em: EntityManager,
   ): Promise<Donation[]> {
     const entities = items.map((it) =>
       this.donationRepository.create({
         amount: it.amount,
         currency,
-        paymentMethod,
+        paymentMethod: String(paymentMethod), // Ensure it's a string
         status: DonationStatusEnum.PENDING,
         donor: donor ?? undefined,
         projectId: it.targetType === 'project' ? it.targetEntity.id : undefined,
@@ -411,10 +459,9 @@ export class DonationsService {
       const { donorInfo, donationItems, paymentMethod, currency } =
         createDonationDto;
 
-      // 1) Validate supported payment method (domain guard)
-      if (!this.isSupportedPaymentMethod(paymentMethod)) {
-        throw new NotAcceptableException('Unsupported payment method');
-      }
+      // 1) Payment method validation is handled by the payment provider
+      // We accept any payment method ID from the provider (MyFatoorah, Stripe, PayMob, etc.)
+      // The provider will validate if the payment method is available for the given currency/amount
 
       // 2) Validate incoming donation items (existence, active donation flag, etc.)
       //    The result includes enriched targets (Project/Campaign)
@@ -494,42 +541,48 @@ export class DonationsService {
 
       let paymentResult;
       try {
-        paymentResult = await this.myFatooraService.createPayment({
+        // Use PaymentService which automatically uses the active provider
+        // This allows easy switching between MyFatoorah, Stripe, PayMob, etc.
+        // Note: referenceId is generic - can be donationId, orderId, subscriptionId, etc.
+        paymentResult = await this.paymentService.createPayment({
           amount: totalAmount,
           currency,
-          donationId: donations[0].id, // Client reference; could be any donationId among this batch
+          referenceId: donations[0].id, // Generic reference ID (donationId in this case)
           description: `Donation for ${quantity} item(s)`,
           customerName,
           customerEmail,
           customerMobile,
           paymentMethodId: paymentMethod,
+          metadata: {
+            // Optional: Add any additional metadata
+            donationCount: quantity,
+            projectIds: validatedItems
+              .filter((item) => item.targetType === 'project')
+              .map((item) => item.projectId),
+            campaignIds: validatedItems
+              .filter((item) => item.targetType === 'campaign')
+              .map((item) => item.campaignId),
+          },
         });
       } catch (error) {
-        // If MyFatoorah API fails (401, etc.), provide a clear error message
+        // If payment provider API fails (401, etc.), provide a clear error message
         const errorMessage =
           error instanceof Error ? error.message : String(error);
 
         // Check if it's an authentication error
+        const activeProvider = this.paymentService.getActiveProviderName();
         if (
           errorMessage.includes('authentication failed') ||
           errorMessage.includes('401') ||
           errorMessage.includes('Unauthorized') ||
           errorMessage.includes('API key')
         ) {
+          // Generate provider-specific error message
+          const providerConfig = this.getProviderConfigMessage(activeProvider);
           throw new BadRequestException({
-            message:
-              'Payment gateway configuration error. MyFatoorah API is not properly configured.',
-            details: [
-              'Please ensure the following environment variables are set correctly:',
-              '- MYFATOORAH_API_KEY: Your MyFatoorah API key',
-              '- MYFATOORAH_API_URL: MyFatoorah API URL (e.g., https://apitest.myfatoorah.com)',
-              '- MYFATOORAH_CALLBACK_URL: Callback URL for successful payments',
-              '- MYFATOORAH_ERROR_URL: Error URL for failed payments',
-              '',
-              'For testing, you can use MyFatoorah test credentials.',
-              'Contact system administrator for assistance.',
-            ].join('\n'),
-            error: 'MyFatoorah authentication failed',
+            message: `Payment gateway configuration error. ${activeProvider} API is not properly configured.`,
+            details: providerConfig,
+            error: `${activeProvider} authentication failed`,
             statusCode: 400,
           });
         }
@@ -540,10 +593,10 @@ export class DonationsService {
 
       // 8) Persist the Payment entity locally, then wire all Donation rows to it
       const paymentEntity = this.paymentRepository.create({
-        transactionId: paymentResult.id, // MyFatoorah InvoiceId
+        transactionId: paymentResult.id, // Provider InvoiceId/PaymentIntentId/etc.
         amount: totalAmount, // keep as integer if you're enforcing no decimals
         currency,
-        paymentMethod,
+        paymentMethod: String(paymentMethod), // Ensure it's a string
         status: paymentResult.status, // typically "pending" here
         paymentUrl: paymentResult.url,
         rawResponse: JSON.stringify(paymentResult.rawResponse),
@@ -566,9 +619,10 @@ export class DonationsService {
 
       // 10) Automatically verify payment status after creation (non-blocking)
       // This helps catch any immediate payment completions and ensures data consistency
+      // PaymentService will check ExpiryDate automatically
       this.verifyPaymentStatusAsync(paymentResult.id).catch((err) => {
         console.error(
-          `Automatic payment verification failed for invoice ${paymentResult.id}:`,
+          `Automatic payment verification failed for transaction ${paymentResult.id}:`,
           err,
         );
       });
@@ -578,7 +632,7 @@ export class DonationsService {
         donationIds: donations.map((d) => d.id),
         paymentUrl: paymentResult.url,
         totalAmount, // grand total (sum of line items)
-        invoiceId: paymentResult.id, // MyFatoorah InvoiceId
+        invoiceId: paymentResult.id, // Provider transaction ID (InvoiceId, PaymentIntentId, etc.)
         lineItems: donations.map((d) => ({
           donationId: d.id,
           amount: Number(d.amount),
@@ -615,25 +669,29 @@ export class DonationsService {
   /**
    * Verify payment status asynchronously (non-blocking)
    * Used for automatic verification after payment creation
+   * PaymentService will automatically check ExpiryDate
    */
-  private async verifyPaymentStatusAsync(invoiceId: string): Promise<void> {
+  private async verifyPaymentStatusAsync(transactionId: string): Promise<void> {
     try {
-      // Wait a short delay to allow MyFatoorah to process the payment
+      // Wait a short delay to allow payment provider to process the payment
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      await this.reconcilePayment(invoiceId, 'InvoiceId');
+      await this.reconcilePayment(transactionId, 'InvoiceId');
     } catch (error) {
       // Log but don't throw - this is a background verification
       console.error(
-        `Background payment verification failed for invoice ${invoiceId}:`,
+        `Background payment verification failed for transaction ${transactionId}:`,
         error,
       );
     }
   }
 
-  /** Webhook (Callback) من MyFatoorah */
+  /**
+   * Handle payment webhook from payment provider
+   * Supports MyFatoorah webhooks (can be extended for other providers)
+   */
   public async handlePaymentWebhook(
-    methods: PaymentMethodEnum[],
+    methods: string[],
     webhookEvent: MyFatooraWebhookEvent,
   ) {
     const qr = this.dataSource.createQueryRunner();
@@ -646,17 +704,13 @@ export class DonationsService {
         (data as any)?.Payments?.[0]?.PaymentMethodId ||
         (data as any)?.PaymentMethodId;
 
-      // If payment method is provided in webhook, validate it
-      // Otherwise, accept all methods (since we now support all MyFatoorah methods)
+      // Accept any payment method ID from the provider
+      // Payment methods are provider-specific and can change over time
       if (paymentMethodId) {
-        if (
-          !this.isSupportedPaymentMethod(paymentMethodId as PaymentMethodEnum)
-        ) {
-          // Log warning but don't block - might be a new payment method
-          console.warn(
-            `Webhook received for potentially unsupported payment method: ${paymentMethodId}`,
-          );
-        }
+        // Log for monitoring purposes
+        console.debug(
+          `Webhook received for payment method: ${paymentMethodId}`,
+        );
       }
 
       // If methods array is provided and not empty, validate
@@ -735,7 +789,7 @@ export class DonationsService {
   /** Reconcile (on-demand / cron) */
   public async reconcilePayment(
     key: string,
-    keyType: 'PaymentId' | 'InvoiceId' = 'InvoiceId',
+    keyType: 'PaymentId' | 'InvoiceId' = 'InvoiceId', // Kept for backward compatibility, but not used
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -747,36 +801,64 @@ export class DonationsService {
       }
 
       /**
-       * 1) Always fetch the latest status from MyFatoorah first.
+       * 1) Always fetch the latest status from payment provider first.
        *    This guarantees we rely on the gateway as the source of truth.
+       *    PaymentService automatically:
+       *    - Selects the active provider (MyFatoorah, Stripe, PayMob, etc.)
+       *    - Tries InvoiceId first, then PaymentId (for MyFatoorah)
+       *    - Checks ExpiryDate and marks expired payments as failed
+       *    - Maps provider-specific statuses to standard outcomes
        */
       let outcome: MfOutcome;
       let invoiceId: string;
       let raw: any;
+      let statusResult: any;
 
       try {
-        const statusResult =
-          await this.myFatooraService.getPaymentStatus(key, keyType);
-        outcome = statusResult.outcome;
-        invoiceId = statusResult.invoiceId;
+        // Use PaymentService which automatically uses the active provider
+        // PaymentService handles:
+        // - Provider selection (MyFatoorah, Stripe, PayMob, etc.)
+        // - ExpiryDate check (marks expired payments as failed)
+        // - Provider-agnostic status mapping
+        statusResult = await this.paymentService.getPaymentStatus(key);
+        outcome = statusResult.outcome as MfOutcome;
+        invoiceId = statusResult.transactionId;
         raw = statusResult.raw;
       } catch (error) {
-        // If payment not found in MyFatoorah, check if we have it locally
+        // If payment not found in provider, check if we have it locally
         if (error instanceof NotFoundException) {
-          // Try to find payment locally first
-          const whereCondition =
-            keyType === 'InvoiceId'
-              ? { transactionId: key }
-              : { mfPaymentId: key as any };
+          // Try to find payment locally by transactionId
+          // PaymentService tries InvoiceId first, then PaymentId automatically (for MyFatoorah)
           const localPayment = await this.paymentRepository.findOne({
-            where: whereCondition as any,
+            where: { transactionId: key } as any,
           });
 
           if (localPayment) {
-            // Payment exists locally but not in MyFatoorah
+            // Payment exists locally but not in payment provider
+            // Check if we have expiry date in rawResponse
+            const localRawResponse = localPayment.rawResponse;
+            if (localRawResponse?.ExpireDate || localRawResponse?.expiryDate) {
+              const expiryDate = new Date(
+                localRawResponse.ExpireDate || localRawResponse.expiryDate,
+              );
+              const now = new Date();
+
+              // If payment has expired, mark as failed
+              if (expiryDate < now && localPayment.status === 'Pending') {
+                // Update local payment status to Failed
+                localPayment.status = 'Failed';
+                await this.paymentRepository.save(localPayment);
+
+                throw new BadRequestException(
+                  `Payment ${key} has expired. The invoice expired on ${expiryDate.toISOString()}.`,
+                );
+              }
+            }
+
+            // Payment exists locally but not in payment provider
             // This could mean the invoice expired or was deleted
             throw new NotFoundException(
-              `Payment ${key} exists locally but not found in MyFatoorah. The invoice may have expired or been deleted.`,
+              `Payment ${key} exists locally but not found in payment provider. The invoice may have expired or been deleted.`,
             );
           }
 
@@ -799,11 +881,11 @@ export class DonationsService {
        * 2) Find the local Payment record.
        *
        *    - If keyType is InvoiceId:
-       *        We stored MyFatoorah InvoiceId in `transactionId` when creating the payment.
+       *        We stored provider InvoiceId in `transactionId` when creating the payment.
        *
        *    - If keyType is PaymentId:
-       *        We try by `mfPaymentId` (MyFatoorah PaymentId) if already stored.
-       *        If not found, we fallback to `transactionId = invoiceId` resolved from MyFatoorah.
+       *        We try by provider-specific payment ID if already stored.
+       *        If not found, we fallback to `transactionId = invoiceId` resolved from provider.
        *
        *    This makes the reconciliation resilient whether the FE uses InvoiceId or PaymentId.
        */
@@ -824,17 +906,22 @@ export class DonationsService {
       }
 
       /**
-       * 3) Persist MyFatoorah PaymentId (mfPaymentId) if available and not set yet.
+       * 3) Persist provider-specific PaymentId if available and not set yet.
        *    This improves future lookups using PaymentId directly.
+       *    For MyFatoorah: mfPaymentId
+       *    For Stripe: paymentId (already in statusResult.paymentId)
+       *    For PayMob: paymentId (already in statusResult.paymentId)
        */
-      const mfPaymentId =
-        raw?.Payments?.[0]?.PaymentId != null
-          ? String(raw.Payments[0].PaymentId)
-          : null;
+      const providerPaymentId =
+        statusResult?.paymentId || raw?.Payments?.[0]?.PaymentId;
 
-      if (mfPaymentId && !(payment as any).mfPaymentId) {
-        (payment as any).mfPaymentId = mfPaymentId;
-        await queryRunner.manager.save(payment);
+      if (providerPaymentId) {
+        const paymentIdStr = String(providerPaymentId);
+        // Store provider-specific payment ID (for MyFatoorah compatibility)
+        if (!(payment as any).mfPaymentId && raw?.Payments?.[0]?.PaymentId) {
+          (payment as any).mfPaymentId = paymentIdStr;
+          await queryRunner.manager.save(payment);
+        }
       }
 
       /**
@@ -852,7 +939,7 @@ export class DonationsService {
        */
       const { updatedDonations } = await this.applyPaymentOutcome(
         payment,
-        outcome as MfOutcome,
+        outcome,
         queryRunner.manager,
       );
 
@@ -863,11 +950,7 @@ export class DonationsService {
         where: { paymentId: payment.id },
         relations: ['donor'],
       });
-      this.sendPaymentNotification(
-        payment,
-        outcome as MfOutcome,
-        donations,
-      ).catch((err) => {
+      this.sendPaymentNotification(payment, outcome, donations).catch((err) => {
         console.error('Notification error (non-critical):', err);
       });
 
@@ -879,7 +962,8 @@ export class DonationsService {
         outcome,
         paymentId: payment.id,
         invoiceId: payment.transactionId,
-        mfPaymentId: (payment as any).mfPaymentId || mfPaymentId || null,
+        mfPaymentId:
+          (payment as any).mfPaymentId || statusResult?.paymentId || null,
         updatedDonations,
       };
     } catch (error) {
