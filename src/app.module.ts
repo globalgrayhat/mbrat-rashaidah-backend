@@ -42,7 +42,7 @@ import { TrafficInterceptor } from './common/interceptors/traffic.interceptor';
 import { CustomLogger } from './common/services/logger.service';
 import { MonitoringService } from './common/services/monitoring.service';
 import { CommonPipesModule } from './common/pipes/pipes.module';
-import { Payment } from './payment/common/entities/payment.entity';
+import { Payment } from './payment/entities/payment.entity';
 
 @Module({
   imports: [

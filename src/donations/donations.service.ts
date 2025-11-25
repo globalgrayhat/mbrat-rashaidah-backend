@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
@@ -22,7 +23,7 @@ import { Project } from '../projects/entities/project.entity';
 import { Campaign } from '../campaigns/entities/campaign.entity';
 import { Donor } from '../donor/entities/donor.entity';
 import { User } from '../user/entities/user.entity';
-import { Payment } from '../payment/common/entities/payment.entity';
+import { Payment } from '../payment/entities/payment.entity';
 
 import { MyFatooraWebhookEvent } from '../payment/common/interfaces/payment-service.interface';
 import { DonationStatusEnum } from '../common/constants/donationStatus.constant';

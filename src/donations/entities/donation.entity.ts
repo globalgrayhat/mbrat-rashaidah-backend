@@ -11,7 +11,7 @@ import {
 import { Project } from '../../projects/entities/project.entity';
 import { Campaign } from '../../campaigns/entities/campaign.entity';
 import { Donor } from '../../donor/entities/donor.entity';
-import { Payment } from '../../payment/common/entities/payment.entity';
+import { Payment } from '../../payment/entities/payment.entity';
 import { DonationStatusEnum } from '../../common/constants/donationStatus.constant';
 
 @Entity('donations')

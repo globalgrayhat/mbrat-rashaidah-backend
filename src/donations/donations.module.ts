@@ -8,7 +8,7 @@ import { Campaign } from '../campaigns/entities/campaign.entity';
 import { User } from '../user/entities/user.entity';
 import { Project } from '../projects/entities/project.entity';
 import { ProjectsModule } from '../projects/projects.module';
-import { Payment } from '../payment/common/entities/payment.entity';
+import { Payment } from '../payment/entities/payment.entity';
 import { Donor } from '../donor/entities/donor.entity';
 import { DonorModule } from '../donor/donor.module';
 import { AppConfigModule } from '../config/config.module';

@@ -17,7 +17,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
-import { Payment } from '../entities/payment.entity';
+import { Payment } from '../../entities/payment.entity';
 import { PaymentService } from '../../payment.service';
 import { PaymentProviderType } from '../interfaces/payment-provider.interface';
 

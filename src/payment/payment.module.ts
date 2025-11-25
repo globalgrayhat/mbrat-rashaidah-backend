@@ -6,7 +6,7 @@ import { MyFatooraService } from './providers/myfatoora.provider';
 import { PayMobService } from './providers/paymob.provider';
 import { StripeService } from './providers/stripe.provider';
 import { PaymentService } from './payment.service';
-import { Payment } from './common/entities/payment.entity';
+import { Payment } from './entities/payment.entity';
 import { AppConfigModule } from '../config/config.module';
 import { AppConfigService } from '../config/config.service';
 import { CurrencyService } from './common/services/currency.service';

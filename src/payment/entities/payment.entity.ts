@@ -8,7 +8,7 @@ import {
   OneToMany,
   Index,
 } from 'typeorm';
-import { Donation } from '../../../donations/entities/donation.entity';
+import { Donation } from '../../donations/entities/donation.entity';
 
 /**
  * Represents a payment transaction in the system.
