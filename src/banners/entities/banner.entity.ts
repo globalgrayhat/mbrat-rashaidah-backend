@@ -50,7 +50,7 @@ export class Banner {
   /**
    * Optional link URL when the banner is clicked
    */
-  @Column({ length: 500, nullable: true })
+  @Column({ type: 'text', nullable: true })
   linkUrl?: string;
 
   /**

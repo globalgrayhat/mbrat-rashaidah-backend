@@ -63,7 +63,7 @@ export class Payment {
   /**
    * The URL provided by the payment gateway for the user to complete the payment.
    */
-  @Column({ length: 500, nullable: true })
+  @Column({ type: 'text', nullable: true })
   paymentUrl?: string;
 
   /**

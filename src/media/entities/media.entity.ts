@@ -32,9 +32,9 @@ export class Media {
   name: string;
 
   /**
-   * Base64-encoded file data
+   * Base64-encoded file data or file path
    */
-  @Column({ length: 500 })
+  @Column({ type: 'text' })
   path: string;
 
   /**
@@ -62,7 +62,7 @@ export class Media {
   /**
    * Alternative text for accessibility
    */
-  @Column({ length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   altText?: string;
 
   /**
