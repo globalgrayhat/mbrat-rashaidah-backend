@@ -120,15 +120,49 @@ export class AppModule implements OnModuleInit {
       );
 
       /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
+      // 1. Fetch all foreign keys
+      const foreignKeys: any[] = await this.dataSource.query(`
+        SELECT TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME 
+        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+        WHERE REFERENCED_TABLE_SCHEMA = '${String(dbName)}' AND REFERENCED_TABLE_NAME IS NOT NULL
+      `);
+
+      // 2. Drop all foreign keys
+      for (const fk of foreignKeys) {
+        try {
+          await this.dataSource.query(
+            `ALTER TABLE \`${String(fk.TABLE_NAME)}\` DROP FOREIGN KEY \`${String(fk.CONSTRAINT_NAME)}\``,
+          );
+        } catch {
+          // Ignore if already dropped
+        }
+      }
+
       const tables: any[] = await this.dataSource.query('SHOW TABLES');
       const tableKey = `Tables_in_${String(dbName)}`;
 
+      // 3. Convert all tables
       for (const row of tables) {
         const tableName = String(row[tableKey] || Object.values(row)[0]);
         await this.dataSource.query(
           `ALTER TABLE \`${tableName}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
         );
       }
+
+      // 4. Recreate all foreign keys
+      for (const fk of foreignKeys) {
+        try {
+          await this.dataSource.query(
+            `ALTER TABLE \`${String(fk.TABLE_NAME)}\` ADD CONSTRAINT \`${String(fk.CONSTRAINT_NAME)}\` FOREIGN KEY (\`${String(fk.COLUMN_NAME)}\`) REFERENCES \`${String(fk.REFERENCED_TABLE_NAME)}\` (\`${String(fk.REFERENCED_COLUMN_NAME)}\`) ON DELETE NO ACTION ON UPDATE NO ACTION`,
+          );
+        } catch (e) {
+          console.error(
+            `[Auto-Fix] Could not recreate FK ${String(fk.CONSTRAINT_NAME)} on ${String(fk.TABLE_NAME)}`,
+            (e as Error).message,
+          );
+        }
+      }
+      /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
 
       await this.dataSource.query('SET FOREIGN_KEY_CHECKS=1;');
       console.log(
