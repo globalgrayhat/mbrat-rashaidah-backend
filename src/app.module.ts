@@ -58,6 +58,8 @@ import { Payment } from './payment/entities/payment.entity';
         username: config.userDatabase, // Database username
         password: config.passwordDatabase, // Database password
         database: config.nameDatabase, // Database name
+        charset: 'utf8mb4',
+        collation: 'utf8mb4_unicode_ci',
         entities: [
           User,
           Banner,
