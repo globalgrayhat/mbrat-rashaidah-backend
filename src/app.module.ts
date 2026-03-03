@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 
 // App configuration modules
 import { AppConfigModule } from './config/config.module';
@@ -52,12 +52,14 @@ import { Payment } from './payment/entities/payment.entity';
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
       useFactory: (config: AppConfigService) => ({
-        type: config.typeDatabase as any, // Database type (e.g., 'mysql')
+        type: config.typeDatabase as 'mysql' | 'mariadb', // Database type (e.g., 'mysql')
         host: config.hostDatabase, // Database host
         port: config.portDatabase, // Database port
         username: config.userDatabase, // Database username
         password: config.passwordDatabase, // Database password
         database: config.nameDatabase, // Database name
+        charset: 'utf8mb4',
+        collation: 'utf8mb4_unicode_ci',
         entities: [
           User,
           Banner,
@@ -102,4 +104,41 @@ import { Payment } from './payment/entities/payment.entity';
   // Global providers (services, interceptors, logging)
   providers: [AppService, TrafficInterceptor, CustomLogger, MonitoringService],
 })
-export class AppModule {}
+export class AppModule implements OnModuleInit {
+  constructor(private dataSource: DataSource) {}
+
+  async onModuleInit() {
+    try {
+      const dbName = this.dataSource.driver.database;
+      console.log(
+        `\n[Auto-Fix] Synchronizing database collations for \`${dbName}\` to utf8mb4_unicode_ci...`,
+      );
+
+      await this.dataSource.query('SET FOREIGN_KEY_CHECKS=0;');
+      await this.dataSource.query(
+        `ALTER DATABASE \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+      );
+
+      /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
+      const tables: any[] = await this.dataSource.query('SHOW TABLES');
+      const tableKey = `Tables_in_${String(dbName)}`;
+
+      for (const row of tables) {
+        const tableName = String(row[tableKey] || Object.values(row)[0]);
+        await this.dataSource.query(
+          `ALTER TABLE \`${tableName}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+        );
+      }
+
+      await this.dataSource.query('SET FOREIGN_KEY_CHECKS=1;');
+      console.log(
+        '[Auto-Fix] Database collations successfully aligned automatically! No mixed collations possible.\n',
+      );
+    } catch (e) {
+      console.error(
+        '[Auto-Fix] Error syncing collations:',
+        (e as Error).message,
+      );
+    }
+  }
+}
