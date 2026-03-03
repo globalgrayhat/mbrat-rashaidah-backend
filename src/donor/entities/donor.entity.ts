@@ -16,7 +16,7 @@ export class Donor {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ nullable: true, length: 255 })
+  @Column({ type: 'text', nullable: true })
   fullName?: string;
 
   @Column({ nullable: true, unique: false }) // Not unique because multiple anonymous donors might use similar general emails or none at all.

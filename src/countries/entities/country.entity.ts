@@ -26,7 +26,7 @@ export class Country {
   /**
    * Official name of the country
    */
-  @Column({ length: 255 })
+  @Column({ type: 'text' })
   name: string;
 
   /**
@@ -38,7 +38,7 @@ export class Country {
   /**
    * URL to the country's flag image
    */
-  @Column({ length: 500, nullable: true })
+  @Column({ type: 'text', nullable: true })
   flagUrl?: string;
 
   /**

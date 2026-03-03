@@ -28,7 +28,7 @@ export class Media {
   /**
    * Display name of the media
    */
-  @Column({ length: 255 })
+  @Column({ type: 'text' })
   name: string;
 
   /**

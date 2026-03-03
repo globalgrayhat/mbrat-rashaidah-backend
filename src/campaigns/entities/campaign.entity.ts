@@ -31,7 +31,7 @@ export class Campaign {
   /**
    * Title of the campaign
    */
-  @Column({ length: 255 })
+  @Column({ type: 'text' })
   title: string;
 
   /**

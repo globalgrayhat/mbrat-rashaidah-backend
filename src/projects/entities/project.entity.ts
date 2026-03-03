@@ -24,7 +24,7 @@ export class Project {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ length: 255 })
+  @Column({ type: 'text' })
   title: string;
 
   @Column({ unique: true, length: 255 })
@@ -33,7 +33,7 @@ export class Project {
   @Column('text')
   description: string;
 
-  @Column({ length: 255 })
+  @Column({ type: 'text' })
   location: string;
 
   @Column({ type: 'timestamp' })
