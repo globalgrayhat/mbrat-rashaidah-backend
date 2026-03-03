@@ -380,7 +380,8 @@ export class MyFatooraService
       Language: 'AR',
       CurrencyIso: currency,
       Description: description,
-      ClientReferenceId: referenceId, // Generic referenceId
+      CustomerReference: referenceId, // generic reference ID (e.g. donation ID)
+      ClientReferenceId: referenceId, // generic reference ID (fallback)
       ExpiryDate,
       ...this.buildCustomerExtras(customerName, customerEmail, customerMobile),
     };
@@ -480,6 +481,10 @@ export class MyFatooraService
       outcome: result.outcome,
       transactionId: result.invoiceId,
       paymentId: result.raw?.Payments?.[0]?.PaymentId,
+      referenceId:
+        result.raw?.CustomerReference ||
+        result.raw?.InvoiceReference ||
+        result.raw?.UserDefinedField,
       amount: result.raw?.InvoiceValue,
       currency: result.raw?.Payments?.[0]?.PaymentCurrencyIso,
       raw: result.raw,

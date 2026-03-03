@@ -1,23 +1,40 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { Module, forwardRef, Optional } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MyFatooraService } from './providers/myfatoora.provider';
-import { PayMobService } from './providers/paymob.provider';
-import { StripeService } from './providers/stripe.provider';
 import { PaymentService } from './payment.service';
 import { Payment } from './entities/payment.entity';
+// External dependencies - make them optional for portability
+// When migrating to another project, you can:
+// 1. Remove these imports if not available
+// 2. Replace with your project's equivalents
+// 3. Create mock services if needed
+// See MIGRATION_IMPORTS_FIX.md for detailed instructions
+
+// Option 1: Keep if you have AppConfigModule in your project
+// Option 2: Remove and providers will read from environment variables directly
 import { AppConfigModule } from '../config/config.module';
 import { AppConfigService } from '../config/config.service';
+
+// Internal payment module services (required)
 import { CurrencyService } from './common/services/currency.service';
-import { NotificationService } from '../common/services/notification.service';
-import { TransactionLoggerService } from '../common/services/transaction-logger.service';
 import { PaymentMethodsController } from './payment-methods.controller';
 import { WebhookController } from './webhook.controller';
 import { PaymentReconciliationController } from './common/cron/payment-reconciliation.cron.controller';
-import { DonationsModule } from '../donations/donations.module';
 import { PaymentReconciliationService } from './common/cron/payment-reconciliation.cron';
 import { ScheduleModule } from '@nestjs/schedule';
+
+// External services - optional (remove if not available in your project)
+// Option 1: Keep if you have these services
+// Option 2: Remove and create mock services (see MIGRATION_IMPORTS_FIX.md)
+// Option 3: Replace with your project's equivalents
+import { NotificationService } from '../common/services/notification.service';
+import { TransactionLoggerService } from '../common/services/transaction-logger.service';
+
+// DonationsModule - remove this when migrating to another project
+// This is only needed for the current project's webhook integration
+// You should create your own webhook handler in your new project
+import { DonationsModule } from '../donations/donations.module';
 
 /**
  * Payment Module
@@ -27,14 +44,13 @@ import { ScheduleModule } from '@nestjs/schedule';
  *
  * Supported Providers:
  * - MyFatoorah: Middle East payment gateway (default, actively used)
+ * Unsupported providers (removed):
  * - PayMob: Egypt and Middle East payment gateway (optional)
  * - Stripe: Global payment gateway (optional)
  *
  * All providers are optional. Configure via environment variables to enable:
  * - MyFatoorah: MYFATOORAH_API_KEY
- * - PayMob: PAYMOB_API_KEY
- * - Stripe: STRIPE_SECRET_KEY
- *
+ * *
  * Providers are automatically registered if configured.
  *
  * To remove a provider:
@@ -51,12 +67,18 @@ import { ScheduleModule } from '@nestjs/schedule';
   imports: [
     TypeOrmModule.forFeature([Payment]),
     ScheduleModule.forRoot(), // Enable cron jobs
-    AppConfigModule, // Optional: Providers can work without it
-    forwardRef(() => DonationsModule), // Use forwardRef to handle circular dependency
+    // AppConfigModule - Optional: Remove if not available, providers will read from env vars
+    AppConfigModule, // Remove this line when migrating if AppConfigModule doesn't exist
+    // DonationsModule - Remove this when migrating to another project
+    // You should create your own webhook handler instead
+    forwardRef(() => DonationsModule), // Remove this line when migrating
   ],
   controllers: [
     PaymentMethodsController,
-    WebhookController,
+    // WebhookController - Optional: Remove if you want to create your own webhook handler
+    // When migrating, you can remove this and create your own webhook controller
+    // that handles your order/donation entities
+    WebhookController, // Remove this line when migrating if you create your own webhook handler
     PaymentReconciliationController,
   ],
   providers: [
@@ -86,51 +108,18 @@ import { ScheduleModule } from '@nestjs/schedule';
       inject: [AppConfigService], // AppConfigService is optional - can be undefined
     },
 
-    // PayMob provider (optional)
-    // Remove this if you don't need PayMob
-    // Can be configured via environment variables OR passed directly to constructor
-    // Provider will be skipped if not configured (no error thrown)
-    {
-      provide: PayMobService,
-      useFactory: (config?: AppConfigService) => {
-        // Provider can work with or without AppConfigService
-        // AppConfigService implements IPayMobConfigAdapter interface
-        try {
-          return new PayMobService((config as any) || undefined);
-        } catch {
-          // If provider fails to initialize, return undefined
-          return undefined;
-        }
-      },
-      inject: [AppConfigService], // AppConfigService is optional - can be undefined
-    },
-
-    // Stripe provider (optional)
-    // Remove this if you don't need Stripe
-    // Can be configured via environment variables OR passed directly to constructor
-    // Provider will be skipped if not configured (no error thrown)
-    {
-      provide: StripeService,
-      useFactory: (config?: AppConfigService) => {
-        // Provider can work with or without AppConfigService
-        // AppConfigService implements IStripeConfigAdapter interface
-        try {
-          return new StripeService((config as any) || undefined);
-        } catch {
-          // If provider fails to initialize, return undefined
-          return undefined;
-        }
-      },
-      inject: [AppConfigService], // AppConfigService is optional - can be undefined
-    },
+    // Stripe and PayMob providers have been removed for simplicity.
+    // To restore them, refer to initial implementation or visit documentation.
 
     // ========== Core Services ==========
     // Payment service manager (manages all providers)
     PaymentService,
-    AppConfigService, // Optional: Providers can work without it
+    // AppConfigService - Optional: Remove if not available
+    AppConfigService, // Remove this line when migrating if AppConfigService doesn't exist
     CurrencyService,
-    NotificationService,
-    TransactionLoggerService,
+    // External services - Optional: Remove if not available or replace with mock services
+    NotificationService, // Remove this line when migrating if NotificationService doesn't exist
+    TransactionLoggerService, // Remove this line when migrating if TransactionLoggerService doesn't exist
 
     // ========== Reconciliation Service ==========
     // Service for automatic payment reconciliation via cron job
@@ -143,13 +132,13 @@ import { ScheduleModule } from '@nestjs/schedule';
     // Export individual providers for direct use if needed
     // Remove exports you don't need
     MyFatooraService,
-    PayMobService,
-    StripeService,
+    MyFatooraService,
 
     // Export shared services
     CurrencyService,
-    NotificationService,
-    TransactionLoggerService,
+    // External services - Remove from exports if removed from providers
+    NotificationService, // Remove this line when migrating if NotificationService doesn't exist
+    TransactionLoggerService, // Remove this line when migrating if TransactionLoggerService doesn't exist
 
     // Export reconciliation service
     PaymentReconciliationService,

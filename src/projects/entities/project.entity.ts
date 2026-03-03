@@ -79,9 +79,9 @@ export class Project {
 
   @ManyToMany(() => Media, (media) => media.projects)
   @JoinTable({
-    name: 'project_media',
-    joinColumn: { name: 'projectId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'mediaId', referencedColumnName: 'id' },
+    name: 'project_media_items',
+    joinColumn: { name: 'projectId' },
+    inverseJoinColumn: { name: 'mediaId' },
   })
   media: Media[];
 

@@ -110,6 +110,7 @@ export interface MyFatoorahGetPaymentStatusData {
   CustomerName?: string;
   CustomerMobile?: string;
   CustomerEmail?: string;
+  UserDefinedField?: string;
 
   Payments: Array<{
     PaymentId: string;

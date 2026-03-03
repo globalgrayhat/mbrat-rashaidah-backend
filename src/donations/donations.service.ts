@@ -11,6 +11,7 @@ import {
   Inject,
   Optional,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
@@ -32,6 +33,7 @@ import { DonationStatusEnum } from '../common/constants/donationStatus.constant'
 import { PaymentService } from '../payment/payment.service';
 import { NotificationService } from '../common/services/notification.service';
 import { PaymentReconciliationService } from '../payment/common/cron/payment-reconciliation.cron';
+import { createPaymentForEntity } from '../payment/common/utils/payment.utils';
 
 import {
   deriveOutcome,
@@ -42,6 +44,7 @@ type MfOutcome = 'paid' | 'failed' | 'pending';
 
 @Injectable()
 export class DonationsService {
+  private readonly logger = new Logger(DonationsService.name);
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(Donation)
@@ -459,6 +462,57 @@ export class DonationsService {
     }
   }
 
+  /**
+   * Format a detailed response for payment status / reconciliation.
+   * Centralizes the response structure to follow DRY principles.
+   */
+  private formatDetailedResponse(
+    payment: Payment,
+    outcome: MfOutcome,
+    donations: Donation[],
+  ) {
+    const totalAmount = Number(payment.amount);
+    const dateObj = payment.createdAt || new Date();
+
+    // Mapping outcomes to user-friendly status
+    const statusMap: Record<string, string> = {
+      paid: 'Success',
+      failed: 'Failed',
+      pending: 'Pending',
+    };
+
+    return {
+      outcome,
+      status: statusMap[outcome] || outcome,
+      invoiceId: payment.transactionId,
+      totalAmount,
+      currency: payment.currency,
+      date: dateObj.toISOString().split('T')[0],
+      time: dateObj.toTimeString().split(' ')[0],
+      paymentId: payment.id,
+      mfPaymentId: payment.mfPaymentId,
+      items: donations.map((d) => {
+        const amount = Number(d.amount);
+        const name =
+          d.project?.title || d.campaign?.title || 'General Donation';
+        const type = d.projectId
+          ? 'project'
+          : d.campaignId
+            ? 'campaign'
+            : 'other';
+        const percentage = totalAmount > 0 ? (amount / totalAmount) * 100 : 0;
+
+        return {
+          name,
+          type,
+          amount,
+          percentage: Math.round(percentage),
+        };
+      }),
+      updatedDonations: donations.map((d) => d.id),
+    };
+  }
+
   public async create(createDonationDto: CreateDonationDto) {
     // Create an explicit DB transaction to ensure atomicity (all-or-nothing)
     const qr = this.dataSource.createQueryRunner();
@@ -601,18 +655,35 @@ export class DonationsService {
         throw error;
       }
 
-      // 8) Persist the Payment entity locally, then wire all Donation rows to it
-      const paymentEntity = this.paymentRepository.create({
-        transactionId: paymentResult.id, // Provider InvoiceId/PaymentIntentId/etc.
-        amount: totalAmount, // keep as integer if you're enforcing no decimals
-        currency,
-        paymentMethod: String(paymentMethod), // Ensure it's a string
-        status: paymentResult.status, // typically "pending" here
-        paymentUrl: paymentResult.url,
-        rawResponse: JSON.stringify(paymentResult.rawResponse),
-      });
+      // 8) Persist the Payment entity locally using utility function
+      // This uses the generic createPaymentForEntity function which works with any entity type
+      const paymentResultFromUtil = await createPaymentForEntity(
+        this.paymentService,
+        qr.manager.getRepository(Payment),
+        {
+          entityId: donations[0].id, // Use first donation ID as reference
+          amount: totalAmount,
+          currency,
+          description: `Donation for ${quantity} item(s)`,
+          customerName,
+          customerEmail,
+          customerMobile: customerMobile || undefined, // Ensure it's string or undefined
+          paymentMethodId: paymentMethod,
+          metadata: {
+            entityType: 'donation',
+            donationCount: quantity,
+            projectIds: validatedItems
+              .filter((item) => item.targetType === 'project')
+              .map((item) => item.projectId),
+            campaignIds: validatedItems
+              .filter((item) => item.targetType === 'campaign')
+              .map((item) => item.campaignId),
+          },
+        },
+      );
 
-      const savedPayment = await qr.manager.save(paymentEntity);
+      // Get the saved payment entity
+      const savedPayment = paymentResultFromUtil.payment;
 
       // Link each donation to the saved payment and store the outbound gateway snapshot
       // Use bulk update for better performance
@@ -648,12 +719,20 @@ export class DonationsService {
       // 10) Automatically verify payment status after creation (non-blocking)
       // This helps catch any immediate payment completions and ensures data consistency
       // PaymentService will check ExpiryDate automatically
-      this.verifyPaymentStatusAsync(paymentResult.id).catch((err) => {
-        console.error(
-          `Automatic payment verification failed for transaction ${paymentResult.id}:`,
-          err,
+      // Use savedPayment.transactionId to ensure we use the correct ID that was saved to DB
+      // Add delay to ensure database transaction is fully committed and visible
+      setTimeout(() => {
+        this.verifyPaymentStatusAsync(savedPayment.transactionId).catch(
+          (err) => {
+            // Log but don't throw - this is a background verification
+            // Payment may not be found immediately after creation due to database replication delay
+            console.error(
+              `Background payment verification failed for transaction ${savedPayment.transactionId}:`,
+              err instanceof Error ? err.message : String(err),
+            );
+          },
         );
-      });
+      }, 3000); // Wait 3 seconds to ensure DB transaction is committed and visible
 
       // 11) Return a clear payload including line items for FE to render the invoice details
       return {
@@ -698,19 +777,47 @@ export class DonationsService {
    * Verify payment status asynchronously (non-blocking)
    * Used for automatic verification after payment creation
    * PaymentService will automatically check ExpiryDate
+   *
+   * This method is called after payment creation to verify status.
+   * It handles cases where payment may not be immediately available in database
+   * due to transaction commit delays or replication.
    */
   private async verifyPaymentStatusAsync(transactionId: string): Promise<void> {
     try {
       // Wait a short delay to allow payment provider to process the payment
+      // and ensure database transaction is fully committed
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
+      // First, check if payment exists in database
+      // If not found, it may be due to database replication delay
+      // In this case, we skip verification rather than throwing an error
+      const paymentExists = await this.paymentRepository.findOne({
+        where: { transactionId },
+      });
+
+      if (!paymentExists) {
+        // Payment not found - this can happen due to:
+        // 1. Database replication delay
+        // 2. Transaction not yet committed
+        // 3. Payment was created in a different transaction context
+        // Log and skip verification - reconciliation cron will handle it later
+        console.warn(
+          `Payment ${transactionId} not found in database for verification. Will be handled by reconciliation cron.`,
+        );
+        return;
+      }
+
+      // Payment exists, proceed with reconciliation
       await this.reconcilePayment(transactionId, 'InvoiceId');
     } catch (error) {
       // Log but don't throw - this is a background verification
-      console.error(
-        `Background payment verification failed for transaction ${transactionId}:`,
-        error,
-      );
+      // Only log if it's not a NotFoundException (we already handled that above)
+      if (!(error instanceof NotFoundException)) {
+        console.error(
+          `Background payment verification failed for transaction ${transactionId}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
   }
 
@@ -917,7 +1024,7 @@ export class DonationsService {
        *
        *    This makes the reconciliation resilient whether the FE uses InvoiceId or PaymentId.
        */
-      const payment = await this.paymentRepository.findOne({
+      let payment = await this.paymentRepository.findOne({
         where:
           keyType === 'InvoiceId'
             ? { transactionId: invoiceId }
@@ -926,6 +1033,93 @@ export class DonationsService {
                 { transactionId: invoiceId },
               ] as any),
       });
+
+      // Recovery Logic: If local payment record is missing but we have a referenceId
+      if (!payment) {
+        this.logger.debug(
+          `Local payment missing for ${keyType}: ${key}. Attempting recovery. statusResult: ${JSON.stringify(
+            { ...statusResult, raw: undefined }, // avoid logging huge raw object
+          )}`,
+        );
+
+        if (statusResult.referenceId) {
+          // 1) Try to find the donation by the referenceId (donationId)
+          const donation = await this.donationRepository.findOne({
+            where: { id: statusResult.referenceId },
+            relations: ['payment'],
+          });
+
+          if (donation) {
+            if (donation.payment) {
+              payment = donation.payment;
+              // Update provider-specific IDs if missing
+              if (payment.transactionId !== invoiceId) {
+                payment.transactionId = invoiceId;
+                await queryRunner.manager.save(payment);
+              }
+            } else {
+              // Recovery: Payment entity was lost (e.g. transaction rollback) but donation exists
+              payment = this.paymentRepository.create({
+                transactionId: invoiceId,
+                amount: statusResult.amount || 0,
+                currency: statusResult.currency || 'KWD',
+                status: outcome as any,
+                paymentUrl: '', // URL is not recoverable from status
+                rawResponse: raw,
+                mfPaymentId: statusResult.paymentId,
+              });
+              await queryRunner.manager.save(payment);
+
+              // Relink the donation
+              donation.paymentId = payment.id;
+              donation.payment = payment;
+              await queryRunner.manager.save(donation);
+            }
+          }
+        }
+
+        // 2) DEEP RECOVERY: If still not found, search metadata in donations for this invoiceId
+        // This handles cases where referenceId was somehow not set or lost
+        if (!payment) {
+          this.logger.debug(
+            `ReferenceId recovery failed for ${invoiceId}. Trying deep metadata search.`,
+          );
+          // Standard MariaDB JSON search for the invoiceId in either the root 'id' or nested 'rawResponse.InvoiceId'
+          const donationMetadataMatch = await this.donationRepository
+            .createQueryBuilder('donation')
+            .where(
+              "JSON_VALUE(donation.paymentDetails, '$.id') = :invoiceId OR JSON_VALUE(donation.paymentDetails, '$.rawResponse.InvoiceId') = :invoiceId",
+              { invoiceId },
+            )
+            .leftJoinAndSelect('donation.payment', 'payment')
+            .getOne();
+
+          if (donationMetadataMatch) {
+            this.logger.log(
+              `Deep recovery successful for InvoiceId: ${invoiceId}. Found donation: ${donationMetadataMatch.id}`,
+            );
+            if (donationMetadataMatch.payment) {
+              payment = donationMetadataMatch.payment;
+            } else {
+              // Create missing payment and link
+              payment = this.paymentRepository.create({
+                transactionId: invoiceId,
+                amount: statusResult.amount || 0,
+                currency: statusResult.currency || 'KWD',
+                status: outcome as any,
+                paymentUrl: '',
+                rawResponse: raw,
+                mfPaymentId: statusResult.paymentId,
+              });
+              await queryRunner.manager.save(payment);
+
+              donationMetadataMatch.paymentId = payment.id;
+              donationMetadataMatch.payment = payment;
+              await queryRunner.manager.save(donationMetadataMatch);
+            }
+          }
+        }
+      }
 
       if (!payment) {
         throw new NotFoundException(
@@ -983,17 +1177,15 @@ export class DonationsService {
       });
 
       /**
-       * 5) Return a normalized response for the frontend.
+       * 5) Return a normalized and detailed response for the frontend.
        *    This is what your success page can consume directly.
        */
-      return {
-        outcome,
-        paymentId: payment.id,
-        invoiceId: payment.transactionId,
-        mfPaymentId:
-          (payment as any).mfPaymentId || statusResult?.paymentId || null,
-        updatedDonations,
-      };
+      const detailedDonations = await this.donationRepository.find({
+        where: { paymentId: payment.id },
+        relations: ['project', 'campaign'],
+      });
+
+      return this.formatDetailedResponse(payment, outcome, detailedDonations);
     } catch (error) {
       await queryRunner.rollbackTransaction();
 

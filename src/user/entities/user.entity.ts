@@ -15,7 +15,7 @@ export class User {
   @Column({ length: 255, nullable: true })
   fullName?: string;
 
-  @Column({ unique: true, length: 255, nullable: true })
+  @Column({ unique: false, length: 255, nullable: true })
   username?: string;
 
   @Column({ unique: true, length: 255 })

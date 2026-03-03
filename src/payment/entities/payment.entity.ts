@@ -5,10 +5,16 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
+  // OneToMany,
   Index,
 } from 'typeorm';
-import { Donation } from '../../donations/entities/donation.entity';
+// External dependency - remove when migrating to another project
+// This import is only used for the OneToMany relationship with Donation
+// When migrating, you can:
+// 1. Remove this import and the donations relationship
+// 2. Use referenceType and referenceId instead (more flexible)
+// See MIGRATION_IMPORTS_FIX.md for instructions
+// import { Donation } from '../../donations/entities/donation.entity';
 
 /**
  * Represents a payment transaction in the system.
@@ -66,6 +72,12 @@ export class Payment {
    */
   @Column({ length: 50 })
   status: string;
+  
+  /**
+   * The specific payment ID from MyFatoorah (needed for backward compatibility/reconciliation).
+   */
+  @Column({ length: 255, nullable: true })
+  mfPaymentId?: string;
 
 
   /**
@@ -75,11 +87,22 @@ export class Payment {
   rawResponse?: any;
 
   /**
-   * A one-to-one relationship with the Donation entity.
-   * TypeORM will automatically create a `donationId` foreign key column in the database based on this relationship.
+   * Relationship with Donation entity (project-specific).
+   * 
+   * When migrating to another project:
+   * 1. Remove this relationship if you don't have Donation entity
+   * 2. Use referenceType and referenceId instead for flexible linking
+   * 
+   * Example without relationship:
+   * ```typescript
+   * // Query payments for a specific entity type
+   * const payments = await paymentRepository.find({
+   *   where: { referenceType: 'order', referenceId: orderId }
+   * });
+   * ```
    */
-  @OneToMany(() => Donation, (d) => d.payment)
-  donations: Donation[];
+  // @OneToMany(() => Donation, (d) => d.payment)
+  // donations: Donation[];
 
   /**
    * Timestamp automatically set when the payment record is first created.

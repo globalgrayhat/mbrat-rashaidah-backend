@@ -7,6 +7,11 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+// External dependency - remove when migrating to another project
+// This webhook controller is specific to the donations project
+// When migrating, you should create your own webhook handler
+// that works with your order/donation entities
+// See MIGRATION_IMPORTS_FIX.md for instructions
 import { DonationsService } from '../donations/donations.service';
 // Payment method validation is no longer needed - providers handle their own payment methods
 import { MyFatooraWebhookEvent } from './common/interfaces/payment-service.interface';
@@ -15,6 +20,8 @@ import { MyFatooraWebhookEvent } from './common/interfaces/payment-service.inter
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
 
+  // DonationsService - Remove this dependency when migrating
+  // Create your own webhook handler that works with your entities
   constructor(private readonly donationsService: DonationsService) {}
 
   @Post('myfatoora')

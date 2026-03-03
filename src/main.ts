@@ -20,7 +20,7 @@ async function bootstrap() {
   // ②   <project root>/uploads  ⤏  http://host:port/uploads/*
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads', // URL prefix
-    setHeaders(res) {
+    setHeaders() {
       // good practice: correct MIME type is set automatically by Express
       // optionally add caching headers here
     },
@@ -28,7 +28,7 @@ async function bootstrap() {
 
   // Enable CORS for development or specific origins in production
   app.enableCors({
-    origin: isDev ? true : configService.allowedOrigins,
+    // origin: isDev ? true : configService.allowedOrigins,
     credentials: true,
   });
 
@@ -36,14 +36,15 @@ async function bootstrap() {
   app.use(helmet());
 
   // Enable GZIP compression for responses
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
   app.use(compression());
 
   // Enable global validation pipe for DTO validation/transformation
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // Remove properties not in DTO
-      transform: true, // Automatically transform payloads to DTO instances
-      forbidNonWhitelisted: true, // Throw error if unknown fields exist
+      // whitelist: true, // Remove properties not in DTO
+      // transform: true, // Automatically transform payloads to DTO instances
+      // forbidNonWhitelisted: true, // Throw error if unknown fields exist
     }),
   );
 

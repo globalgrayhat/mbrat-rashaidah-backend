@@ -2,6 +2,9 @@
 
 > Each section contains a service snippet + corresponding controller (or REST flow) for a specific use case. Copy, adapt, and plug into your NestJS modules.
 
+> **📚 For complete order integration examples, see:** `src/payment/common/examples/order-payment-integration.example.ts`
+> **📖 For detailed integration guide, see:** `ORDER_INTEGRATION_GUIDE.md`
+
 ---
 
 ## 1. Donations (Stripe)
@@ -319,7 +322,295 @@ Register it in `PaymentModule` by adding the provider to the `providers` array a
 
 ---
 
-## 9. Frontend Integration Notes
+## 9. Order Integration Examples (Products, Courses, Subscriptions)
+
+> **📚 For complete, production-ready examples, see:** `src/payment/common/examples/order-payment-integration.example.ts`
+> **📖 For detailed step-by-step guide, see:** `ORDER_INTEGRATION_GUIDE.md`
+
+### 9.1 Product Order (E-commerce)
+
+```typescript
+@Injectable()
+export class ProductOrderService {
+  constructor(
+    @InjectRepository(ProductOrder)
+    private readonly orderRepository: Repository<ProductOrder>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
+    private readonly paymentService: PaymentService,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  async createOrder(orderData: {
+    items: Array<{ productId: string; quantity: number; price: number }>;
+    customerId: string;
+    customerEmail: string;
+    customerName: string;
+    currency: string;
+    paymentMethod: string;
+  }) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Calculate total
+      const totalAmount = orderData.items.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0,
+      );
+
+      // 2. Create order
+      const order = this.orderRepository.create({
+        totalAmount,
+        currency: orderData.currency,
+        status: 'pending',
+        items: orderData.items,
+        customerId: orderData.customerId,
+        customerEmail: orderData.customerEmail,
+        customerName: orderData.customerName,
+      });
+      const savedOrder = await queryRunner.manager.save(order);
+
+      // 3. Create payment
+      const paymentResult = await this.paymentService.createPayment({
+        amount: totalAmount,
+        currency: orderData.currency,
+        referenceId: savedOrder.id, // ✅ Link to order
+        description: `Order #${savedOrder.id} - ${orderData.items.length} item(s)`,
+        customerName: orderData.customerName,
+        customerEmail: orderData.customerEmail,
+        paymentMethodId: orderData.paymentMethod,
+        metadata: {
+          orderType: 'product',
+          itemCount: orderData.items.length,
+        },
+      });
+
+      // 4. Save payment entity
+      const payment = this.paymentRepository.create({
+        transactionId: paymentResult.id,
+        amount: totalAmount,
+        currency: orderData.currency,
+        paymentMethod: String(orderData.paymentMethod),
+        status: paymentResult.status,
+        paymentUrl: paymentResult.url,
+        rawResponse: paymentResult.rawResponse,
+      });
+      const savedPayment = await queryRunner.manager.save(payment);
+
+      // 5. Link payment to order
+      await queryRunner.manager.update(ProductOrder, savedOrder.id, {
+        paymentId: savedPayment.id,
+        paymentStatus: 'pending',
+      });
+
+      await queryRunner.commitTransaction();
+
+      return {
+        order: savedOrder,
+        paymentUrl: paymentResult.url,
+        invoiceId: paymentResult.id,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async handleOrderWebhook(invoiceId: string) {
+    const payment = await this.paymentRepository.findOne({
+      where: { transactionId: invoiceId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Payment not found: ${invoiceId}`);
+    }
+
+    // Get latest status from provider
+    const statusResult = await this.paymentService.getPaymentStatus(invoiceId);
+
+    // Update payment
+    payment.status = statusResult.outcome;
+    await this.paymentRepository.save(payment);
+
+    // Update order status
+    const order = await this.orderRepository.findOne({
+      where: { paymentId: payment.id },
+    });
+
+    if (order) {
+      if (statusResult.outcome === 'paid') {
+        order.status = 'paid';
+        order.paidAt = new Date();
+      } else if (statusResult.outcome === 'failed') {
+        order.status = 'failed';
+      }
+      await this.orderRepository.save(order);
+    }
+
+    return {
+      success: true,
+      paymentId: payment.id,
+      status: statusResult.outcome,
+    };
+  }
+}
+```
+
+### 9.2 Course Order
+
+```typescript
+@Injectable()
+export class CourseOrderService {
+  constructor(
+    @InjectRepository(CourseOrder)
+    private readonly orderRepository: Repository<CourseOrder>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
+    private readonly paymentService: PaymentService,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  async createCourseOrder(orderData: {
+    courses: Array<{ courseId: string; courseName: string; price: number }>;
+    studentId: string;
+    studentEmail: string;
+    studentName: string;
+    currency: string;
+    paymentMethod: string;
+  }) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Calculate total
+      const totalAmount = orderData.courses.reduce(
+        (sum, course) => sum + course.price,
+        0,
+      );
+
+      // Create order
+      const order = this.orderRepository.create({
+        totalAmount,
+        currency: orderData.currency,
+        status: 'pending',
+        courses: orderData.courses,
+        studentId: orderData.studentId,
+        studentEmail: orderData.studentEmail,
+        studentName: orderData.studentName,
+      });
+      const savedOrder = await queryRunner.manager.save(order);
+
+      // Create payment
+      const courseNames = orderData.courses.map((c) => c.courseName).join(', ');
+      const paymentResult = await this.paymentService.createPayment({
+        amount: totalAmount,
+        currency: orderData.currency,
+        referenceId: savedOrder.id, // ✅ Link to course order
+        description: `Course Enrollment: ${courseNames}`,
+        customerName: orderData.studentName,
+        customerEmail: orderData.studentEmail,
+        paymentMethodId: orderData.paymentMethod,
+        metadata: {
+          orderType: 'course',
+          courseCount: orderData.courses.length,
+          courseIds: orderData.courses.map((c) => c.courseId),
+        },
+      });
+
+      // Save payment
+      const payment = this.paymentRepository.create({
+        transactionId: paymentResult.id,
+        amount: totalAmount,
+        currency: orderData.currency,
+        paymentMethod: String(orderData.paymentMethod),
+        status: paymentResult.status,
+        paymentUrl: paymentResult.url,
+        rawResponse: paymentResult.rawResponse,
+      });
+      const savedPayment = await queryRunner.manager.save(payment);
+
+      // Link payment to order
+      await queryRunner.manager.update(CourseOrder, savedOrder.id, {
+        paymentId: savedPayment.id,
+        paymentStatus: 'pending',
+      });
+
+      await queryRunner.commitTransaction();
+
+      return {
+        order: savedOrder,
+        paymentUrl: paymentResult.url,
+        invoiceId: paymentResult.id,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async handleCourseOrderWebhook(invoiceId: string) {
+    const payment = await this.paymentRepository.findOne({
+      where: { transactionId: invoiceId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Payment not found: ${invoiceId}`);
+    }
+
+    const statusResult = await this.paymentService.getPaymentStatus(invoiceId);
+
+    payment.status = statusResult.outcome;
+    await this.paymentRepository.save(payment);
+
+    // If paid, enroll student in courses
+    if (statusResult.outcome === 'paid') {
+      const order = await this.orderRepository.findOne({
+        where: { paymentId: payment.id },
+      });
+
+      if (order && order.status !== 'paid') {
+        // Enroll student in all courses
+        for (const course of order.courses) {
+          await this.enrollStudentInCourse(order.studentId, course.courseId);
+        }
+
+        order.status = 'paid';
+        order.enrolledAt = new Date();
+        await this.orderRepository.save(order);
+      }
+    }
+
+    return {
+      success: true,
+      paymentId: payment.id,
+      status: statusResult.outcome,
+    };
+  }
+
+  private async enrollStudentInCourse(studentId: string, courseId: string) {
+    // Your enrollment logic here
+  }
+}
+```
+
+### 9.3 Key Integration Points
+
+1. **Create Order**: Use `PaymentService.createPayment()` with `referenceId = orderId`
+2. **Save Payment**: Always save `Payment` entity with `transactionId` from provider
+3. **Link Payment**: Update order with `paymentId` to link them
+4. **Webhook Handler**: Use `PaymentService.getPaymentStatus()` to get latest status
+5. **Update Order**: Update order status based on payment outcome
+
+---
+
+## 10. Frontend Integration Notes
 
 1. Always call `/payment-methods/available?invoiceAmount=X&currencyIso=Y&provider=Z` to render the actual methods from the selected provider.
 2. For donations/orders where the user picks a specific method ID, send that ID directly in the POST body (number or string).

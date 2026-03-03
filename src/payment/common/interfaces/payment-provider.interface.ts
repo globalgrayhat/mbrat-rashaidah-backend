@@ -20,6 +20,7 @@ export interface PaymentStatusResult {
   outcome: 'paid' | 'failed' | 'pending';
   transactionId: string; // Invoice ID, Payment Intent ID, etc.
   paymentId?: string; // Provider-specific payment ID
+  referenceId?: string; // Reference ID sent during creation (e.g. donationId)
   amount?: number;
   currency?: string;
   raw?: any; // Raw response from provider
@@ -163,7 +164,7 @@ export interface ProviderHealthCheckResult {
  * Payment Provider Type
  * Used to identify which provider to use
  */
-export type PaymentProviderType = 'myfatoorah' | 'stripe' | 'paymob' | string;
+export type PaymentProviderType = 'myfatoorah' | string;
 
 /**
  * Payment Provider Configuration

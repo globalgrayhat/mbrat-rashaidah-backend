@@ -64,7 +64,7 @@ export class Donation {
   webhookResponse?: any;
   // --- End Payment Gateway Details ---
 
-  @ManyToOne(() => Payment, (p) => p.donations, { nullable: true })
+  @ManyToOne(() => Payment, { nullable: true })
   @JoinColumn({ name: 'paymentId' })
   payment?: Payment;
 

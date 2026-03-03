@@ -78,13 +78,20 @@ export class DonationsController {
   @Public()
   @Get('payment-status')
   getAndReconcile(
-    @Query('key') key: string,
+    @Query('key') key?: string,
+    @Query('paymentId') paymentId?: string,
+    @Query('Id') id?: string,
     @Query('type') type: 'InvoiceId' | 'PaymentId' = 'InvoiceId',
   ) {
-    if (!key) {
-      throw new BadRequestException('Missing key');
+    const finalKey = key || paymentId || id;
+    if (!finalKey) {
+      throw new BadRequestException('Missing key, paymentId, or Id');
     }
-    return this.donationsService.reconcilePayment(key, type);
+
+    // If paymentId or Id is used, it's usually a MyFatoorah PaymentId redirect
+    const finalType = paymentId || id ? 'PaymentId' : type;
+
+    return this.donationsService.reconcilePayment(finalKey, finalType);
   }
 
   @Public()

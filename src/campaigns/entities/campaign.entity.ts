@@ -90,9 +90,9 @@ export class Campaign {
    */
   @ManyToMany(() => Media, (media) => media.campaigns)
   @JoinTable({
-    name: 'campaign_media',
-    joinColumn: { name: 'campaignId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'mediaId', referencedColumnName: 'id' },
+    name: 'campaign_media_items',
+    joinColumn: { name: 'campaignId' },
+    inverseJoinColumn: { name: 'mediaId' },
   })
   media: Media[];
 

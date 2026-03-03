@@ -129,8 +129,6 @@ import {
   PaymentResult,
 } from './common/interfaces/payment-service.interface';
 import { MyFatooraService } from './providers/myfatoora.provider';
-import { PayMobService } from './providers/paymob.provider';
-import { StripeService } from './providers/stripe.provider';
 
 /**
  * Payment Service Manager
@@ -154,13 +152,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
   // Memory optimization: Track provider count to prevent unbounded growth
   private static readonly MAX_PROVIDERS = 10; // Maximum number of providers to prevent memory leaks
 
-  constructor(
-    // Optional: Inject providers you want to auto-register
-    // If not provided, you can register them manually via registerProvider()
-    private readonly myFatooraService?: MyFatooraService,
-    private readonly payMobService?: PayMobService, // PayMob provider (optional)
-    private readonly stripeService?: StripeService, // Stripe provider (optional)
-  ) {}
+  constructor(private readonly myFatooraService?: MyFatooraService) {}
 
   /**
    * Initialize providers on module init
@@ -169,23 +161,8 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
    */
   onModuleInit() {
     // Auto-register MyFatoorah if provided and configured
-    // Provider will be skipped if not configured (no error thrown)
     if (this.myFatooraService) {
       this.registerProvider('myfatoorah', this.myFatooraService);
-    }
-
-    // Auto-register PayMob if provided and configured
-    // PayMob is available but not used by default
-    // Provider will be skipped if not configured (no error thrown)
-    if (this.payMobService) {
-      this.registerProvider('paymob', this.payMobService);
-    }
-
-    // Auto-register Stripe if provided and configured
-    // Stripe is available but not used by default
-    // Provider will be skipped if not configured (no error thrown)
-    if (this.stripeService) {
-      this.registerProvider('stripe', this.stripeService);
     }
 
     // Set active provider (can be configured via environment variable)
