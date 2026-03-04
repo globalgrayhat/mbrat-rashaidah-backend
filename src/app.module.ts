@@ -162,7 +162,7 @@ export class AppModule implements OnModuleInit {
           );
         }
       }
-      /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
+      /* eslint-enable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
 
       await this.dataSource.query('SET FOREIGN_KEY_CHECKS=1;');
       console.log(
