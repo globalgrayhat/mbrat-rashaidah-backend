@@ -25,55 +25,50 @@ export class AppController {
       const media: DbRow[] = await this.dataSource.query(
         'SELECT id, name, path FROM media',
       );
-      const campaigns: DbRow[] = await this.dataSource.query(
-        'SELECT id, title, slug FROM campaigns',
-      );
       const projects: DbRow[] = await this.dataSource.query(
         'SELECT id, title, slug FROM projects',
       );
 
-      let restoredCampaigns = 0;
       let restoredProjects = 0;
       const logs: string[] = [];
 
-      for (const m of media) {
-        const fileName = String(m.path || '').toLowerCase();
-        const matchedCampaign = campaigns.find(
-          (c) =>
-            fileName.includes(
-              String(c.slug || '')
-                .toLowerCase()
-                .replace(/-/g, ''),
-            ) || fileName.includes(String(c.title || '').toLowerCase()),
-        );
+      const keywordMap: Record<string, string[]> = {
+        'aftar-saeem': ['aftarsaem', 'iftar'],
+        'alaqraboon-ui': ['aqraboon', 'agraboon', 'relatives'],
+        'alnhor-altabhh': ['aqiqah', 'vows', 'alaqaweqq'],
+        'alsral-amtaffa': ['amutafffa', 'alsra'],
+        'alzkaaa-aiai': ['zkao', 'zakat'],
+        bardalehhm: ['bardale', 'cold_winter'],
+        daeemmarda: ['daeeem', 'patient'],
+        'General-donations': ['general_charity', 'generalsadd'],
+        'kaffarat-kaf': ['kafarat', 'expiation'],
+        ksoashtaa: ['kasoashtaa', 'clothing', 'harsh_winter'],
+        'Medical-Students': ['medical_students', 'medical'],
+        'rasd-alkher': ['needy_families'],
+        'Rsoom-drasyaa': ['rsomdrasaaa', 'tuition_fee', 'rsoom'],
+        'sdad-aldioons': ['sadadadeon', 'debtors'],
+        'suqia-amaa': ['suqia', 'water_supply'],
+        'Waqf-alrshaida': ['waqf_building'],
+      };
 
-        const matchedProject =
-          !matchedCampaign &&
-          projects.find(
-            (p) =>
-              fileName.includes(
-                String(p.slug || '')
-                  .toLowerCase()
-                  .replace(/-/g, ''),
-              ) || fileName.includes(String(p.title || '').toLowerCase()),
-          );
+      for (const project of projects) {
+        let matchedMedia: DbRow | undefined;
+        const keywords = keywordMap[String(project.slug || '')];
 
-        if (matchedCampaign) {
+        if (keywords) {
+          matchedMedia = media.find((m) => {
+            const path = String(m.path || '').toLowerCase();
+            return keywords.some((kw) => path.includes(kw));
+          });
+        }
+
+        if (matchedMedia) {
           logs.push(
-            `Matched [${String(m.path)}] --> Campaign: ${String(matchedCampaign.title)}`,
-          );
-          await this.dataSource.query(
-            'INSERT IGNORE INTO campaign_media_items (campaignId, mediaId) VALUES (?, ?)',
-            [matchedCampaign.id, m.id],
-          );
-          restoredCampaigns++;
-        } else if (matchedProject) {
-          logs.push(
-            `Matched [${String(m.path)}] --> Project: ${String(matchedProject.title)}`,
+            `Matched Project: ${String(project.title || project.slug)} --> [${String(matchedMedia.path)}]`,
           );
           await this.dataSource.query(
             'INSERT IGNORE INTO project_media_items (projectId, mediaId) VALUES (?, ?)',
-            [matchedProject.id, m.id],
+            [project.id, matchedMedia.id],
           );
           restoredProjects++;
         }
@@ -81,7 +76,6 @@ export class AppController {
 
       return {
         message: 'Recovery Complete',
-        restoredCampaigns,
         restoredProjects,
         logs,
       };
