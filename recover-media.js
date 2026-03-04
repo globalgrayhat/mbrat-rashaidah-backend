@@ -10,6 +10,7 @@ async function recover() {
       user: process.env.USER_DATABASE,
       password: process.env.PASSWORD_DATABASE,
       database: process.env.NAME_DATABASE,
+      port: process.env.PORT_DATABASE,
     });
 
     console.log('Connected to Database. Fetching Media, Campaigns, and Projects...');
