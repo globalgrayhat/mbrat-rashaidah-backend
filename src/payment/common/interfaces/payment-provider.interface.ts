@@ -110,9 +110,15 @@ export interface IPaymentProvider {
   /**
    * Get payment status by transaction ID
    * @param transactionId Transaction/Invoice ID from provider
+   * @param keyType Optional key type hint (e.g., 'InvoiceId' or 'PaymentId')
+   *               Providers that support multiple key types can use this to
+   *               optimize lookup (avoid unnecessary fallback calls)
    * @returns Payment status result
    */
-  getPaymentStatus(transactionId: string): Promise<PaymentStatusResult>;
+  getPaymentStatus(
+    transactionId: string,
+    keyType?: string,
+  ): Promise<PaymentStatusResult>;
 
   /**
    * Get available payment methods for a given amount and currency

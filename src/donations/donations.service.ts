@@ -924,7 +924,7 @@ export class DonationsService {
   /** Reconcile (on-demand / cron) */
   public async reconcilePayment(
     key: string,
-    keyType: 'PaymentId' | 'InvoiceId' = 'InvoiceId', // Kept for backward compatibility, but not used
+    keyType: 'PaymentId' | 'InvoiceId' = 'InvoiceId',
   ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -940,7 +940,7 @@ export class DonationsService {
        *    This guarantees we rely on the gateway as the source of truth.
        *    PaymentService automatically:
        *    - Selects the active provider (MyFatoorah, Stripe, PayMob, etc.)
-       *    - Tries InvoiceId first, then PaymentId (for MyFatoorah)
+       *    - Uses keyType to optimize lookup (InvoiceId vs PaymentId)
        *    - Checks ExpiryDate and marks expired payments as failed
        *    - Maps provider-specific statuses to standard outcomes
        */
@@ -950,12 +950,14 @@ export class DonationsService {
       let statusResult: any;
 
       try {
-        // Use PaymentService which automatically uses the active provider
-        // PaymentService handles:
-        // - Provider selection (MyFatoorah, Stripe, PayMob, etc.)
-        // - ExpiryDate check (marks expired payments as failed)
-        // - Provider-agnostic status mapping
-        statusResult = await this.paymentService.getPaymentStatus(key);
+        // Use PaymentService with keyType for optimized lookup
+        // When keyType='PaymentId', provider goes directly to PaymentId lookup
+        // instead of wasting an API call trying InvoiceId first
+        statusResult = await this.paymentService.getPaymentStatus(
+          key,
+          undefined, // use active provider
+          keyType,    // forward the key type
+        );
         outcome = statusResult.outcome as MfOutcome;
         invoiceId = statusResult.transactionId;
         raw = statusResult.raw;

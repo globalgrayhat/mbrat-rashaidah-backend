@@ -87,6 +87,24 @@ export class Payment {
   rawResponse?: any;
 
   /**
+   * Customer name captured from payment creation or webhook.
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  customerName?: string;
+
+  /**
+   * Customer email captured from payment creation or webhook.
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  customerEmail?: string;
+
+  /**
+   * Customer mobile captured from payment creation or webhook.
+   */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  customerMobile?: string;
+
+  /**
    * Relationship with Donation entity (project-specific).
    * 
    * When migrating to another project:

@@ -73,7 +73,7 @@ import { Payment } from './payment/entities/payment.entity';
           Donation,
           Payment,
         ],
-        synchronize: config.isDevelopment, // Auto-sync entities (only in development)
+        synchronize: false, // DISABLED: We sync manually in onModuleInit AFTER fixing collations
         // Optional: SSL configuration if required by the host (e.g., Clever Cloud)
         // ssl: {
         //   rejectUnauthorized: false, // Accept self-signed certificates
@@ -168,6 +168,12 @@ export class AppModule implements OnModuleInit {
       console.log(
         '[Auto-Fix] Database collations successfully aligned automatically! No mixed collations possible.\n',
       );
+
+      // Now that all tables have consistent collation, run TypeORM sync
+      // This creates missing tables/columns without breaking FK constraints
+      console.log('[Auto-Fix] Running TypeORM schema synchronize...');
+      await this.dataSource.synchronize();
+      console.log('[Auto-Fix] Schema synchronization complete!\n');
     } catch (e) {
       console.error(
         '[Auto-Fix] Error syncing collations:',

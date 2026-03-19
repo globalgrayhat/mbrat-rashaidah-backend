@@ -51,6 +51,7 @@ import {
   MyFatoorahResponseData,
   MyFatoorahGetPaymentStatusData,
   MyFatoorahInitiatePaymentData,
+  MyFatooraWebhookEvent,
 } from '../common/interfaces/payment-service.interface';
 import {
   IPaymentProvider,
@@ -458,9 +459,29 @@ export class MyFatooraService
     }
   }
 
-  async getPaymentStatus(transactionId: string): Promise<PaymentStatusResult> {
-    // MyFatoorah supports both InvoiceId and PaymentId lookup
-    // Try InvoiceId first (most common), then PaymentId if needed
+  async getPaymentStatus(
+    transactionId: string,
+    keyType?: string,
+  ): Promise<PaymentStatusResult> {
+    // If keyType is explicitly provided, use it directly (avoid unnecessary fallback)
+    // This is the optimized path when the caller knows what type of key they have
+    if (keyType === 'PaymentId') {
+      const result = await this.getPaymentStatusInternal(
+        transactionId,
+        'PaymentId',
+      );
+      return this.mapStatusResult(result);
+    }
+
+    if (keyType === 'InvoiceId') {
+      const result = await this.getPaymentStatusInternal(
+        transactionId,
+        'InvoiceId',
+      );
+      return this.mapStatusResult(result);
+    }
+
+    // No keyType specified — try InvoiceId first (most common), then PaymentId
     // Note: ExpiryDate check is handled at PaymentService level
     let result;
     try {
@@ -477,6 +498,17 @@ export class MyFatooraService
       }
     }
 
+    return this.mapStatusResult(result);
+  }
+
+  /**
+   * Map internal status result to PaymentStatusResult
+   */
+  private mapStatusResult(result: {
+    outcome: 'paid' | 'failed' | 'pending';
+    invoiceId: string;
+    raw: MyFatoorahGetPaymentStatusData;
+  }): PaymentStatusResult {
     return {
       outcome: result.outcome,
       transactionId: result.invoiceId,
@@ -557,21 +589,53 @@ export class MyFatooraService
   }
 
   async handleWebhook(webhookData: any): Promise<PaymentWebhookEvent> {
-    interface MyFatoorahWebhookData {
-      Event: number;
-      CreatedDate: string;
-      Data: {
-        InvoiceId: number;
-        InvoiceStatus: number;
-        CustomerName: string;
-        CustomerEmail: string;
-        CustomerMobile: string;
-        InvoiceValue: number;
-        CurrencyIso?: string;
+    const data = webhookData as MyFatooraWebhookEvent;
+
+    // ── Detect format: V2 has Event as object with Code/Name ──
+    const isV2 = data.Event && typeof data.Event === 'object' && 'Code' in data.Event;
+
+    if (isV2) {
+      // ── V2 Webhook Format (official MyFatoorah docs) ──
+      const invoice = data.Data?.Invoice;
+      const transaction = data.Data?.Transaction;
+      const customer = data.Data?.Customer;
+      const amount = data.Data?.Amount;
+
+      // Map V2 statuses:
+      // Invoice.Status: "PAID" | "PENDING"
+      // Transaction.Status: "SUCCESS" | "FAILED" | "AUTHORIZE" | "CANCELED"
+      let status: 'paid' | 'failed' | 'pending' | 'canceled' = 'pending';
+      if (invoice?.Status === 'PAID' || transaction?.Status === 'SUCCESS') {
+        status = 'paid';
+      } else if (transaction?.Status === 'FAILED') {
+        status = 'failed';
+      } else if (transaction?.Status === 'CANCELED') {
+        status = 'canceled';
+      }
+
+      return {
+        eventType: data.Event?.Code ?? 1,
+        transactionId: invoice?.Id || String(data.InvoiceId || ''),
+        status,
+        amount: amount?.ValueInBaseCurrency
+          ? parseFloat(amount.ValueInBaseCurrency)
+          : 0,
+        currency: amount?.BaseCurrency || 'KWD',
+        customerInfo: {
+          name: customer?.Name,
+          email: customer?.Email,
+          mobile: customer?.Mobile,
+        },
+        rawData: webhookData,
+        timestamp:
+          data.Event?.CreationDate ||
+          transaction?.TransactionDate ||
+          new Date().toISOString(),
       };
     }
 
-    const event = webhookData as MyFatoorahWebhookData;
+    // ── V1 Webhook Format (legacy) ──
+    const v1Data = data.Data as any;
 
     const statusMap: Record<
       number,
@@ -586,28 +650,38 @@ export class MyFatooraService
     };
 
     return {
-      eventType: event.Event,
-      transactionId: String(event.Data.InvoiceId),
-      status: statusMap[event.Data.InvoiceStatus] || 'pending',
-      amount: event.Data.InvoiceValue,
-      currency: event.Data.CurrencyIso || 'KWD',
+      eventType: typeof data.Event === 'number' ? data.Event : (data.Event as any)?.Code ?? 0,
+      transactionId: String(v1Data?.InvoiceId || data.InvoiceId || ''),
+      status: statusMap[v1Data?.InvoiceStatus] || 'pending',
+      amount: v1Data?.InvoiceValue || 0,
+      currency: v1Data?.CurrencyIso || 'KWD',
       customerInfo: {
-        name: event.Data.CustomerName,
-        email: event.Data.CustomerEmail,
-        mobile: event.Data.CustomerMobile,
+        name: v1Data?.CustomerName,
+        email: v1Data?.CustomerEmail,
+        mobile: v1Data?.CustomerMobile,
       },
       rawData: webhookData,
-      timestamp: event.CreatedDate || new Date().toISOString(),
+      timestamp: v1Data?.CreatedDate || new Date().toISOString(),
     };
   }
 
   async validateWebhook(webhookData: any): Promise<boolean> {
-    return Promise.resolve(
-      !!(
-        (webhookData as { Event?: number })?.Event !== undefined &&
-        (webhookData as { Data?: { InvoiceId?: number } })?.Data?.InvoiceId !==
-          undefined
-      ),
+    const data = webhookData as MyFatooraWebhookEvent;
+
+    // V2 format: Event is an object with Code
+    if (data.Event && typeof data.Event === 'object' && 'Code' in data.Event) {
+      return !!(
+        data.Event.Code === 1 &&
+        data.Data?.Invoice?.Id &&
+        data.Data?.Transaction?.PaymentId
+      );
+    }
+
+    // V1 format: Event is a number, Data.InvoiceId is a number
+    return !!(
+      (webhookData as { Event?: number })?.Event !== undefined &&
+      (webhookData as { Data?: { InvoiceId?: number } })?.Data?.InvoiceId !==
+        undefined
     );
   }
 

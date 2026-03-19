@@ -3,6 +3,8 @@ import { Module, forwardRef, Optional } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MyFatooraService } from './providers/myfatoora.provider';
 import { PaymentService } from './payment.service';
+import { InvoiceService } from './invoice.service';
+import { InvoiceController } from './invoice.controller';
 import { Payment } from './entities/payment.entity';
 // External dependencies - make them optional for portability
 // When migrating to another project, you can:
@@ -35,6 +37,7 @@ import { TransactionLoggerService } from '../common/services/transaction-logger.
 // This is only needed for the current project's webhook integration
 // You should create your own webhook handler in your new project
 import { DonationsModule } from '../donations/donations.module';
+import { Donation } from '../donations/entities/donation.entity';
 
 /**
  * Payment Module
@@ -65,7 +68,7 @@ import { DonationsModule } from '../donations/donations.module';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment]),
+    TypeOrmModule.forFeature([Payment, Donation]),
     ScheduleModule.forRoot(), // Enable cron jobs
     // AppConfigModule - Optional: Remove if not available, providers will read from env vars
     AppConfigModule, // Remove this line when migrating if AppConfigModule doesn't exist
@@ -75,6 +78,7 @@ import { DonationsModule } from '../donations/donations.module';
   ],
   controllers: [
     PaymentMethodsController,
+    InvoiceController, // Unified invoice details endpoint (GET /api/invoice/:invoiceId)
     // WebhookController - Optional: Remove if you want to create your own webhook handler
     // When migrating, you can remove this and create your own webhook controller
     // that handles your order/donation entities
@@ -114,6 +118,7 @@ import { DonationsModule } from '../donations/donations.module';
     // ========== Core Services ==========
     // Payment service manager (manages all providers)
     PaymentService,
+    InvoiceService, // Invoice normalization and retrieval
     // AppConfigService - Optional: Remove if not available
     AppConfigService, // Remove this line when migrating if AppConfigService doesn't exist
     CurrencyService,
@@ -128,10 +133,10 @@ import { DonationsModule } from '../donations/donations.module';
   exports: [
     // Export PaymentService as the main interface
     PaymentService,
+    InvoiceService, // Export for use in other modules if needed
 
     // Export individual providers for direct use if needed
     // Remove exports you don't need
-    MyFatooraService,
     MyFatooraService,
 
     // Export shared services

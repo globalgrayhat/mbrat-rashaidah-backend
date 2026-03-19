@@ -71,23 +71,105 @@ export interface MyFatoorahInitiatePaymentData {
 }
 
 // Specific types for webhook events to improve type safety
+// Supports both MyFatoorah Webhook V1 (legacy) and V2 (current) formats
+
+/**
+ * MyFatoorah Webhook V2 Event format (current official format)
+ * Reference: https://docs.myfatoorah.com/docs/get-started
+ */
 export interface MyFatooraWebhookEvent {
-  Event: number; // Enum for event type
-  CreatedDate: string;
-  Data: {
-    InvoiceId: number;
-    InvoiceStatus: number;
-    InvoiceReference: string;
-    CustomerReference: string;
-    CreatedDate: string;
-    ExpireDate: string;
-    InvoiceValue: number;
-    Comments: string;
-    CustomerName: string;
-    CustomerMobile: string;
-    CustomerEmail: string;
+  // ── V2 Format (current official) ──
+  Event?: {
+    Code: number; // 1 = PAYMENT_STATUS_CHANGED
+    Name: string; // "PAYMENT_STATUS_CHANGED"
+    CountryIsoCode?: string;
+    CreationDate?: string;
+    Reference?: string;
+  };
+  Data?: {
+    // V2 nested structure
+    Invoice?: {
+      Id: string;
+      Status: string; // "PAID" | "PENDING"
+      Reference?: string;
+      CreationDate?: string;
+      ExpirationDate?: string;
+      UserDefinedField?: string;
+      ExternalIdentifier?: string;
+      MetaData?: Record<string, string>;
+    };
+    Transaction?: {
+      Id: string;
+      Status: string; // "SUCCESS" | "FAILED" | "AUTHORIZE" | "CANCELED"
+      PaymentMethod?: string;
+      PaymentId: string;
+      ReferenceId?: string;
+      TrackId?: string;
+      AuthorizationId?: string;
+      TransactionDate?: string;
+      ECI?: string;
+      IP?: { Address?: string; Country?: string };
+      Error?: { Code?: string; Message?: string };
+      Card?: {
+        NameOnCard?: string;
+        Number?: string;
+        Token?: string;
+        PanHash?: string;
+        ExpiryMonth?: string;
+        ExpiryYear?: string;
+        Brand?: string;
+        Issuer?: string;
+        IssuerCountry?: string;
+        FundingMethod?: string;
+      };
+    };
+    Customer?: {
+      Name?: string;
+      Mobile?: string;
+      Email?: string;
+    };
+    Amount?: {
+      BaseCurrency?: string;
+      ValueInBaseCurrency?: string;
+      ServiceCharge?: string;
+      ServiceChargeVAT?: string;
+      ReceivableAmount?: string;
+      DisplayCurrency?: string;
+      ValueInDisplayCurrency?: string;
+      PayCurrency?: string;
+      ValueInPayCurrency?: string;
+    };
+    Suppliers?: Array<{
+      Code?: number;
+      Name?: string;
+      InvoiceShare?: string;
+      ProposedShare?: string;
+      DepositShare?: string;
+    }>;
+
+    // ── V1 Legacy flat fields (backward compatibility) ──
+    InvoiceId?: number;
+    InvoiceStatus?: number;
+    InvoiceReference?: string;
+    CustomerReference?: string;
+    CreatedDate?: string;
+    ExpireDate?: string;
+    InvoiceValue?: number;
+    Comments?: string;
+    CustomerName?: string;
+    CustomerMobile?: string;
+    CustomerEmail?: string;
+    Payments?: Array<{
+      PaymentId?: string;
+      PaymentMethodId?: number;
+      PaymentMethod?: string;
+      PaymentStatus?: string;
+      PaymentDate?: string;
+      PaymentCurrencyIso?: string;
+    }>;
   };
 
+  // ── V1 Legacy top-level fields ──
   InvoiceId?: number;
   TransactionStatus?: string;
 }

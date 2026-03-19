@@ -665,12 +665,13 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
   async getPaymentStatus(
     transactionId: string,
     providerType?: PaymentProviderType,
+    keyType?: string,
   ): Promise<PaymentStatusResult> {
     const provider = providerType
       ? this.getProvider(providerType)
       : this.getActiveProvider();
 
-    const result = await provider.getPaymentStatus(transactionId);
+    const result = await provider.getPaymentStatus(transactionId, keyType);
 
     // Check if payment has expired (provider-agnostic check)
     // This is done at PaymentService level, not provider level
