@@ -1,6 +1,5 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
 
 // App configuration modules
 import { AppConfigModule } from './config/config.module';
@@ -24,6 +23,8 @@ import { CampaignsModule } from './campaigns/campaigns.module';
 import { DonorModule } from './donor/donor.module';
 import { DonationsModule } from './donations/donations.module';
 import { PaymentModule } from './payment/payment.module';
+import { OutboxModule } from './common/outbox/outbox.module';
+import { HomeModule } from './home/home.module';
 
 // Database entity imports
 import { User } from './user/entities/user.entity';
@@ -43,6 +44,8 @@ import { CustomLogger } from './common/services/logger.service';
 import { MonitoringService } from './common/services/monitoring.service';
 import { CommonPipesModule } from './common/pipes/pipes.module';
 import { Payment } from './payment/entities/payment.entity';
+import { OutboxEvent } from './common/outbox/entities/outbox-event.entity';
+import { HomeFeedService } from './common/home-feed.service';
 
 @Module({
   imports: [
@@ -52,12 +55,12 @@ import { Payment } from './payment/entities/payment.entity';
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],
       useFactory: (config: AppConfigService) => ({
-        type: config.typeDatabase as 'mysql' | 'mariadb', // Database type (e.g., 'mysql')
-        host: config.hostDatabase, // Database host
-        port: config.portDatabase, // Database port
-        username: config.userDatabase, // Database username
-        password: config.passwordDatabase, // Database password
-        database: config.nameDatabase, // Database name
+        type: config.typeDatabase as 'mysql' | 'mariadb',
+        host: config.hostDatabase,
+        port: config.portDatabase,
+        username: config.userDatabase,
+        password: config.passwordDatabase,
+        database: config.nameDatabase,
         charset: 'utf8mb4',
         collation: 'utf8mb4_unicode_ci',
         entities: [
@@ -72,12 +75,10 @@ import { Payment } from './payment/entities/payment.entity';
           Donor,
           Donation,
           Payment,
+          OutboxEvent,
         ],
-        synchronize: false, // DISABLED: We sync manually in onModuleInit AFTER fixing collations
-        // Optional: SSL configuration if required by the host (e.g., Clever Cloud)
-        // ssl: {
-        //   rejectUnauthorized: false, // Accept self-signed certificates
-        // },
+        synchronize: !config.isProduction,
+        // logging: config.isDevelopment,
       }),
       inject: [AppConfigService], // Inject AppConfigService to access environment configs
     }),
@@ -96,6 +97,8 @@ import { Payment } from './payment/entities/payment.entity';
     DonorModule,
     DonationsModule,
     PaymentModule,
+    OutboxModule,
+    HomeModule,
   ],
 
   // Main app controller
@@ -104,81 +107,7 @@ import { Payment } from './payment/entities/payment.entity';
   // Global providers (services, interceptors, logging)
   providers: [AppService, TrafficInterceptor, CustomLogger, MonitoringService],
 })
-export class AppModule implements OnModuleInit {
-  constructor(private dataSource: DataSource) {}
-
-  async onModuleInit() {
-    try {
-      const dbName = this.dataSource.driver.database;
-      console.log(
-        `\n[Auto-Fix] Synchronizing database collations for \`${dbName}\` to utf8mb4_unicode_ci...`,
-      );
-
-      await this.dataSource.query('SET FOREIGN_KEY_CHECKS=0;');
-      await this.dataSource.query(
-        `ALTER DATABASE \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
-      );
-
-      /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
-      // 1. Fetch all foreign keys
-      const foreignKeys: any[] = await this.dataSource.query(`
-        SELECT TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME 
-        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
-        WHERE REFERENCED_TABLE_SCHEMA = '${String(dbName)}' AND REFERENCED_TABLE_NAME IS NOT NULL
-      `);
-
-      // 2. Drop all foreign keys
-      for (const fk of foreignKeys) {
-        try {
-          await this.dataSource.query(
-            `ALTER TABLE \`${String(fk.TABLE_NAME)}\` DROP FOREIGN KEY \`${String(fk.CONSTRAINT_NAME)}\``,
-          );
-        } catch {
-          // Ignore if already dropped
-        }
-      }
-
-      const tables: any[] = await this.dataSource.query('SHOW TABLES');
-      const tableKey = `Tables_in_${String(dbName)}`;
-
-      // 3. Convert all tables
-      for (const row of tables) {
-        const tableName = String(row[tableKey] || Object.values(row)[0]);
-        await this.dataSource.query(
-          `ALTER TABLE \`${tableName}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
-        );
-      }
-
-      // 4. Recreate all foreign keys
-      for (const fk of foreignKeys) {
-        try {
-          await this.dataSource.query(
-            `ALTER TABLE \`${String(fk.TABLE_NAME)}\` ADD CONSTRAINT \`${String(fk.CONSTRAINT_NAME)}\` FOREIGN KEY (\`${String(fk.COLUMN_NAME)}\`) REFERENCES \`${String(fk.REFERENCED_TABLE_NAME)}\` (\`${String(fk.REFERENCED_COLUMN_NAME)}\`) ON DELETE NO ACTION ON UPDATE NO ACTION`,
-          );
-        } catch (e) {
-          console.error(
-            `[Auto-Fix] Could not recreate FK ${String(fk.CONSTRAINT_NAME)} on ${String(fk.TABLE_NAME)}`,
-            (e as Error).message,
-          );
-        }
-      }
-      /* eslint-enable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
-
-      await this.dataSource.query('SET FOREIGN_KEY_CHECKS=1;');
-      console.log(
-        '[Auto-Fix] Database collations successfully aligned automatically! No mixed collations possible.\n',
-      );
-
-      // Now that all tables have consistent collation, run TypeORM sync
-      // This creates missing tables/columns without breaking FK constraints
-      console.log('[Auto-Fix] Running TypeORM schema synchronize...');
-      await this.dataSource.synchronize();
-      console.log('[Auto-Fix] Schema synchronization complete!\n');
-    } catch (e) {
-      console.error(
-        '[Auto-Fix] Error syncing collations:',
-        (e as Error).message,
-      );
-    }
-  }
+export class AppModule {
+  // Database migrations will now handle schema changes
+  // Run: npm run typeorm migration:run to apply pending migrations
 }

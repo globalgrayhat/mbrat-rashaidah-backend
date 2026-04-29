@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -23,7 +22,6 @@ import {
 @Index(['status'])
 @Index(['paymentMethod'])
 @Index(['currency'])
-@Index(['createdAt'])
 export class Payment {
   /**
    * The unique identifier for the payment (UUID).
@@ -72,13 +70,12 @@ export class Payment {
    */
   @Column({ length: 50 })
   status: string;
-  
+
   /**
    * The specific payment ID from MyFatoorah (needed for backward compatibility/reconciliation).
    */
   @Column({ length: 255, nullable: true })
   mfPaymentId?: string;
-
 
   /**
    * Stores the raw JSON response from the payment gateway for debugging and logging purposes.
@@ -106,11 +103,11 @@ export class Payment {
 
   /**
    * Relationship with Donation entity (project-specific).
-   * 
+   *
    * When migrating to another project:
    * 1. Remove this relationship if you don't have Donation entity
    * 2. Use referenceType and referenceId instead for flexible linking
-   * 
+   *
    * Example without relationship:
    * ```typescript
    * // Query payments for a specific entity type

@@ -12,6 +12,6 @@ import { CampaignExistsPipe } from '../common/pipes/campaignExists.pipe';
   imports: [TypeOrmModule.forFeature([Campaign, User, Category, Media])],
   controllers: [CampaignsController],
   providers: [CampaignsService, CampaignExistsPipe],
-  exports: [CampaignsService, CampaignExistsPipe],
+  exports: [CampaignsService, CampaignExistsPipe, TypeOrmModule],
 })
 export class CampaignsModule {}

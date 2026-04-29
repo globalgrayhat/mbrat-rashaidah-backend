@@ -1,6 +1,8 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { AppService } from './app.service';
 import { DataSource } from 'typeorm';
+import { Public } from './common/decorators/public.decorator';
+import { HomeFeedService } from './common/home-feed.service';
 
 @Controller()
 export class AppController {
@@ -15,6 +17,17 @@ export class AppController {
     appName: string;
   } {
     return this.appService.getHealth();
+  }
+
+  @Public()
+  @Get('home/feed')
+  getHomeFeed(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 10;
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    return this.appService.getHomeFeed(parsedLimit, parsedOffset);
   }
 
   @Get('recover-media')

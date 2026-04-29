@@ -14,6 +14,7 @@ import {
   StreamableFile,
   BadRequestException,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
@@ -26,8 +27,10 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
+import { Public } from '../common/decorators/public.decorator';
 import * as fs from 'fs';
 import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 @Controller('media')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -58,10 +61,22 @@ export class MediaController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
 
+    // Fix encoding issues for filenames (e.g. Arabic names)
+    // Multer sometimes parses UTF-8 filenames as Latin1
+    try {
+      file.originalname = Buffer.from(file.originalname, 'latin1').toString(
+        'utf8',
+      );
+    } catch (e) {
+      // Fallback to original name if conversion fails
+    }
+
     const uploadDir = path.join(process.cwd(), 'uploads');
     fs.mkdirSync(uploadDir, { recursive: true });
 
-    const uniqueFileName = file.originalname; // You can add UUID if needed
+    // Use UUID to prevent file name collisions
+    const fileExt = path.extname(file.originalname);
+    const uniqueFileName = `${uuidv4()}${fileExt}`;
     const filePath = path.join(uploadDir, uniqueFileName);
 
     fs.writeFileSync(filePath, file.buffer);
@@ -80,6 +95,17 @@ export class MediaController {
   @Get()
   findAll() {
     return this.mediaService.findAll();
+  }
+
+  @Public()
+  @Get('paginated')
+  findAllPaginated(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 10;
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    return this.mediaService.findAllPaginated(parsedLimit, parsedOffset);
   }
 
   @Get(':id')
@@ -119,6 +145,12 @@ export class MediaController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   remove(@Param('id') id: string) {
     return this.mediaService.remove(id);
+  }
+
+  @Post('fix-encoding')
+  @Roles(Role.SUPER_ADMIN)
+  async fixEncoding() {
+    return this.mediaService.fixAllEncodings();
   }
 
   private getMediaTypeFromMimeType(mimeType: string): MediaType {

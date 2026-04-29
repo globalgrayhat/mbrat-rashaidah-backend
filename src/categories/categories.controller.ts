@@ -40,7 +40,6 @@ export class CategoriesController {
 
   @Get('slug/:slug')
   findBySlug(@Param('slug') slug: string) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return this.categoriesService.findBySlug(slug);
   }
 

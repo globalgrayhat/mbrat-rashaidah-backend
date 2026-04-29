@@ -148,9 +148,11 @@ export class Campaign {
   @Column({ default: true })
   isTargetAmountActive: boolean;
 
+  @Column({ default: false })
+  isPinned: boolean;
+
   /**
-   * Optional specific donation goal.
-   * Using precision 15 and scale 3 to support KWD and other currencies with up to 3 decimal places.
+   * Timestamp when the campaign record was created
    */
   @Column('decimal', { precision: 15, scale: 3, nullable: true })
   donationGoal?: number;

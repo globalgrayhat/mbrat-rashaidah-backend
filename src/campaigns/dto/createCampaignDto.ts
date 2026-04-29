@@ -79,4 +79,8 @@ export class CreateCampaignDto {
   @IsOptional()
   @IsUUID()
   createdById?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPinned?: boolean;
 }

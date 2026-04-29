@@ -153,6 +153,7 @@ export class MyFatooraService
       normalizedConfig.apiUrl ?? DEFAULT_MYFATOORAH_CONFIG.apiUrl ?? '';
     const trimmed = rawUrl.trim();
     const noTrail = trimmed.replace(/\/+$/, '');
+    // Use v2 API - more widely supported
     this.baseUrl = noTrail.endsWith('/v2') ? `${noTrail}/` : `${noTrail}/v2/`;
 
     // Initialize HTTP client with optimized configuration for memory management
@@ -162,7 +163,7 @@ export class MyFatooraService
       baseURL: this.baseUrl,
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Type': 'application/json',
         Accept: 'application/json',
       },
       // Memory optimization: Connection pooling and timeouts
@@ -250,18 +251,6 @@ export class MyFatooraService
     return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
   }
 
-  private buildCustomerExtras(
-    name?: string,
-    email?: string,
-    mobile?: string,
-  ): Record<string, unknown> {
-    const out: Record<string, unknown> = {};
-    if (name) out.CustomerName = name;
-    if (email) out.CustomerEmail = email;
-    if (mobile) out.CustomerMobile = mobile;
-    return out;
-  }
-
   private async request<T>(
     method: Method,
     url: string,
@@ -272,7 +261,7 @@ export class MyFatooraService
       const config: AxiosRequestConfig = {
         method,
         url,
-        ...(data !== undefined ? { data } : {}),
+        ...(method !== 'GET' && data !== undefined ? { data } : {}),
       };
       const response = await this.http.request<{
         IsSuccess: boolean;
@@ -347,7 +336,7 @@ export class MyFatooraService
     const {
       amount,
       currency,
-      referenceId, // Generic reference ID (donationId, orderId, etc.)
+      referenceId,
       description,
       customerName,
       customerEmail,
@@ -355,7 +344,6 @@ export class MyFatooraService
       paymentMethodId,
     } = payload;
 
-    // Validate callback URLs if not provided in config
     if (!this.callbackUrl) {
       throw new BadRequestException(
         'Callback URL is required. Please configure myFatoorahCallbackUrl.',
@@ -372,20 +360,26 @@ export class MyFatooraService
       this.invoiceTz,
     );
 
-    const requestBody = {
-      ...(paymentMethodId && { InvoicePaymentMethods: [paymentMethodId] }),
+    // Use v2 SendPayment endpoint (widely supported)
+    const requestBody: Record<string, unknown> = {
       NotificationOption: 'LNK',
       InvoiceValue: amount,
       CallBackUrl: this.callbackUrl,
       ErrorUrl: this.errorUrl,
       Language: 'AR',
       CurrencyIso: currency,
+      CustomerReference: referenceId,
+      ClientReferenceId: referenceId,
       Description: description,
-      CustomerReference: referenceId, // generic reference ID (e.g. donation ID)
-      ClientReferenceId: referenceId, // generic reference ID (fallback)
       ExpiryDate,
-      ...this.buildCustomerExtras(customerName, customerEmail, customerMobile),
+      CustomerName: customerName || undefined,
+      CustomerEmail: customerEmail || undefined,
+      CustomerMobile: customerMobile || undefined,
     };
+
+    if (paymentMethodId) {
+      requestBody.InvoicePaymentMethods = [paymentMethodId];
+    }
 
     const data = await this.request<MyFatoorahResponseData>(
       'post',
@@ -396,7 +390,7 @@ export class MyFatooraService
 
     if (!data.InvoiceURL || !data.InvoiceId) {
       throw new InternalServerErrorException(
-        'Payment initiation failed: Missing InvoiceURL or InvoiceId.',
+        'Payment initiation failed: Missing InvoiceURL or InvoiceId from MyFatoorah.',
       );
     }
 
@@ -408,8 +402,40 @@ export class MyFatooraService
     };
   }
 
+  private mapPaymentMethodIdToCode(id: number): string {
+    const methodMap: Record<number, string> = {
+      1: 'CARD',
+      2: 'KNET',
+      3: 'APPLEPAY',
+      4: 'GOOGLE_PAY',
+    };
+    return methodMap[id] || 'CARD';
+  }
+
+  private extractCountryCode(mobile?: string): string {
+    if (!mobile) return '+965';
+    if (mobile.startsWith('+')) {
+      const match = mobile.match(/^\+(\d{1,4})/);
+      return match ? `+${match[1]}` : '+965';
+    }
+    if (mobile.startsWith('00')) {
+      const match = mobile.match(/^00(\d{1,4})/);
+      return match ? `+${match[1]}` : '+965';
+    }
+    return '+965';
+  }
+
+  private extractMobileNumber(mobile?: string): string {
+    if (!mobile) return '';
+    return (
+      mobile.replace(/^\+\d{1,4}|^(00|\*)/, '').replace(/\D/g, '') || mobile
+    );
+  }
+
   /**
    * Unified status snapshot (Internal method)
+   * Uses v2 GetPaymentStatus POST endpoint
+   * Auto-detects key type based on ID format
    */
   private async getPaymentStatusInternal(
     key: string,
@@ -420,21 +446,32 @@ export class MyFatooraService
     raw: MyFatoorahGetPaymentStatusData;
   }> {
     if (!key) throw new BadRequestException('Key is required.');
+
+    // Auto-detect key type: PaymentIds start with "07" (21 digits), InvoiceIds are numeric
+    const autoKeyType = key.startsWith('07') ? 'PaymentId' : 'InvoiceId';
+    const finalKeyType =
+      keyType === 'InvoiceId' && autoKeyType === 'PaymentId'
+        ? 'PaymentId'
+        : keyType === 'PaymentId' && autoKeyType === 'InvoiceId'
+          ? 'InvoiceId'
+          : keyType;
+
     const data = await this.request<MyFatoorahGetPaymentStatusData>(
       'post',
       'GetPaymentStatus',
-      { Key: key, KeyType: keyType },
+      { Key: key, KeyType: finalKeyType },
       'Get MyFatoorah payment status',
     );
 
-    // Note: ExpiryDate check is handled at PaymentService level
-    // This keeps provider logic clean and independent
-
-    const paymentStatuses = data.Payments?.map((p) => p?.PaymentStatus) ?? [];
+    const transactionStatuses =
+      data.Payments?.map((t) => t?.PaymentStatus) ?? [];
 
     return {
       invoiceId: String(data.InvoiceId),
-      outcome: deriveOutcome(data.InvoiceStatus as unknown, paymentStatuses),
+      outcome: deriveOutcome(
+        data.InvoiceStatus as unknown,
+        transactionStatuses,
+      ),
       raw: data,
     };
   }
@@ -502,7 +539,7 @@ export class MyFatooraService
   }
 
   /**
-   * Map internal status result to PaymentStatusResult
+   * Map internal status result to PaymentStatusResult (v2 format)
    */
   private mapStatusResult(result: {
     outcome: 'paid' | 'failed' | 'pending';
@@ -518,7 +555,7 @@ export class MyFatooraService
         result.raw?.InvoiceReference ||
         result.raw?.UserDefinedField,
       amount: result.raw?.InvoiceValue,
-      currency: result.raw?.Payments?.[0]?.PaymentCurrencyIso,
+      currency: result.raw?.Payments?.[0]?.PaymentCurrencyIso || 'KWD',
       raw: result.raw,
     };
   }
@@ -591,36 +628,51 @@ export class MyFatooraService
   async handleWebhook(webhookData: any): Promise<PaymentWebhookEvent> {
     const data = webhookData as MyFatooraWebhookEvent;
 
-    // ── Detect format: V2 has Event as object with Code/Name ──
-    const isV2 = data.Event && typeof data.Event === 'object' && 'Code' in data.Event;
+    const isV2 =
+      data.Event && typeof data.Event === 'object' && 'Code' in data.Event;
 
     if (isV2) {
-      // ── V2 Webhook Format (official MyFatoorah docs) ──
       const invoice = data.Data?.Invoice;
       const transaction = data.Data?.Transaction;
       const customer = data.Data?.Customer;
       const amount = data.Data?.Amount;
 
-      // Map V2 statuses:
-      // Invoice.Status: "PAID" | "PENDING"
-      // Transaction.Status: "SUCCESS" | "FAILED" | "AUTHORIZE" | "CANCELED"
-      let status: 'paid' | 'failed' | 'pending' | 'canceled' = 'pending';
-      if (invoice?.Status === 'PAID' || transaction?.Status === 'SUCCESS') {
-        status = 'paid';
-      } else if (transaction?.Status === 'FAILED') {
-        status = 'failed';
-      } else if (transaction?.Status === 'CANCELED') {
-        status = 'canceled';
+      let webhookStatus: 'paid' | 'failed' | 'pending' | 'canceled' = 'pending';
+      if (
+        invoice?.Status === 'PAID' ||
+        transaction?.Status === 'SUCCESS' ||
+        transaction?.Status === 'CAPTURED'
+      ) {
+        webhookStatus = 'paid';
+      } else if (
+        transaction?.Status === 'FAILED' ||
+        transaction?.Status === 'DECLINED' ||
+        transaction?.Status === 'VOID'
+      ) {
+        webhookStatus = 'failed';
+      } else if (
+        transaction?.Status === 'CANCELED' ||
+        transaction?.Status === 'CANCELLED'
+      ) {
+        webhookStatus = 'canceled';
+      } else if (
+        transaction?.Status === 'INPROGRESS' ||
+        transaction?.Status === 'AUTHORIZE' ||
+        transaction?.Status === 'AUTHORIZED'
+      ) {
+        webhookStatus = 'pending';
       }
 
       return {
         eventType: data.Event?.Code ?? 1,
         transactionId: invoice?.Id || String(data.InvoiceId || ''),
-        status,
+        status: webhookStatus,
         amount: amount?.ValueInBaseCurrency
           ? parseFloat(amount.ValueInBaseCurrency)
-          : 0,
-        currency: amount?.BaseCurrency || 'KWD',
+          : amount?.ValueInPayCurrency
+            ? parseFloat(amount.ValueInPayCurrency)
+            : 0,
+        currency: amount?.BaseCurrency || amount?.PayCurrency || 'KWD',
         customerInfo: {
           name: customer?.Name,
           email: customer?.Email,
@@ -634,7 +686,6 @@ export class MyFatooraService
       };
     }
 
-    // ── V1 Webhook Format (legacy) ──
     const v1Data = data.Data as any;
 
     const statusMap: Record<
@@ -650,7 +701,10 @@ export class MyFatooraService
     };
 
     return {
-      eventType: typeof data.Event === 'number' ? data.Event : (data.Event as any)?.Code ?? 0,
+      eventType:
+        typeof data.Event === 'number'
+          ? data.Event
+          : ((data.Event as any)?.Code ?? 0),
       transactionId: String(v1Data?.InvoiceId || data.InvoiceId || ''),
       status: statusMap[v1Data?.InvoiceStatus] || 'pending',
       amount: v1Data?.InvoiceValue || 0,
@@ -687,6 +741,7 @@ export class MyFatooraService
 
   /**
    * InitiatePayment endpoint - Get available payment methods with service charges
+   * Note: This is still v2 API, needs to be called separately
    */
   async initiatePayment(
     invoiceAmount: number,
@@ -701,25 +756,35 @@ export class MyFatooraService
       );
     }
 
-    const requestBody = {
-      InvoiceAmount: invoiceAmount,
-      CurrencyIso: currencyIso,
-    };
+    // Use v2 endpoint for initiate - different base URL needed
+    const baseUrl = this.baseUrl.replace('/v3/', '/v2/');
+    const tempHttp = this.http;
+    const originalBaseURL = tempHttp.defaults.baseURL;
 
-    const data = await this.request<MyFatoorahInitiatePaymentData>(
-      'post',
-      'InitiatePayment',
-      requestBody,
-      'Initiate MyFatoorah payment',
-    );
+    try {
+      // Temporarily change baseURL to v2
+      tempHttp.defaults.baseURL = baseUrl;
 
-    if (!data.PaymentMethods || !Array.isArray(data.PaymentMethods)) {
-      throw new InternalServerErrorException(
-        'InitiatePayment failed: Missing or invalid PaymentMethods array.',
+      const data = await this.request<MyFatoorahInitiatePaymentData>(
+        'post',
+        'InitiatePayment',
+        {
+          InvoiceAmount: invoiceAmount,
+          CurrencyIso: currencyIso,
+        },
+        'Initiate MyFatoorah payment',
       );
-    }
 
-    return data;
+      if (!data.PaymentMethods || !Array.isArray(data.PaymentMethods)) {
+        throw new InternalServerErrorException(
+          'InitiatePayment failed: Missing or invalid PaymentMethods array.',
+        );
+      }
+
+      return data;
+    } finally {
+      tempHttp.defaults.baseURL = originalBaseURL;
+    }
   }
 
   /**

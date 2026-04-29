@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /**
@@ -13,13 +12,14 @@
  * This service is completely independent from PaymentService and can be
  * used in any project that needs payment reconciliation.
  */
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { Payment } from '../../entities/payment.entity';
 import { PaymentService } from '../../payment.service';
 import { PaymentProviderType } from '../interfaces/payment-provider.interface';
+import { DonationsService } from '../../../donations/donations.service';
 
 /**
  * Temporary payment storage in memory
@@ -68,6 +68,9 @@ export class PaymentReconciliationService implements OnModuleDestroy {
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
     private readonly paymentService: PaymentService,
+    @Optional()
+    @Inject(forwardRef(() => DonationsService))
+    private readonly donationsService?: DonationsService,
   ) {
     // Clean up old entries from cache every 20 minutes
     // Store interval reference for cleanup on module destroy
@@ -400,6 +403,29 @@ export class PaymentReconciliationService implements OnModuleDestroy {
     newStatus?: string;
   }> {
     try {
+      // Use DonationsService for reconciliation if available to handle business logic
+      // This ensures that donation statuses and project totals are updated correctly
+      if (this.donationsService) {
+        try {
+          const result = await this.donationsService.reconcilePayment(
+            payment.transactionId,
+            'InvoiceId',
+          );
+          if (result && result.outcome !== 'pending') {
+            return {
+              updated: true,
+              markedAsFailed: result.outcome === 'failed',
+              newStatus: result.outcome,
+            };
+          }
+        } catch (e) {
+          this.logger.debug(
+            `DonationsService reconciliation skipped or failed for ${payment.transactionId}: ${e.message}`,
+          );
+        }
+      }
+
+      // Fallback to manual reconciliation logic (Payment record only)
       // Determine provider from rawResponse or use default
       const provider = this.detectProviderFromPayment(payment);
 
@@ -578,65 +604,19 @@ export class PaymentReconciliationService implements OnModuleDestroy {
   private detectProviderFromPayment(
     payment: Payment,
   ): PaymentProviderType | null {
-    // Parse rawResponse if it's a string
     const raw = this.parseRawResponse(payment.rawResponse);
 
-    // Try to get provider from rawResponse metadata
     if (raw) {
-      // Check for provider in metadata
       if (raw.provider) {
         return raw.provider as PaymentProviderType;
       }
 
-      // Check for MyFatoorah indicators
       if (raw.InvoiceId || raw.InvoiceURL || raw.PaymentMethods) {
         return 'myfatoorah';
       }
-
-      // Check for PayMob indicators
-      if (raw.intentionId || raw.payment_keys || raw.order_id) {
-        return 'paymob';
-      }
-
-      // Check for Stripe indicators
-      if (raw.id?.startsWith('pi_') || raw.client_secret) {
-        return 'stripe';
-      }
     }
 
-    // Try to detect from transactionId format
-    if (payment.transactionId) {
-      // MyFatoorah InvoiceId is usually numeric
-      if (/^\d+$/.test(payment.transactionId)) {
-        return 'myfatoorah';
-      }
-
-      // Stripe Payment Intent starts with 'pi_'
-      if (payment.transactionId.startsWith('pi_')) {
-        return 'stripe';
-      }
-
-      // PayMob IDs are usually numeric
-      if (/^\d+$/.test(payment.transactionId)) {
-        // Could be PayMob or MyFatoorah, try PayMob first
-        return 'paymob';
-      }
-    }
-
-    // Default to MyFatoorah if no indicators found
-    // (assuming it's the default provider)
-    const defaultProvider = this.paymentService.getActiveProviderName();
-    if (defaultProvider && defaultProvider !== 'none') {
-      return defaultProvider;
-    }
-
-    // Try registered providers in order
-    const registeredProviders = this.paymentService.getRegisteredProviders();
-    if (registeredProviders.length > 0) {
-      return registeredProviders[0];
-    }
-
-    return null;
+    return 'myfatoorah';
   }
 
   /**

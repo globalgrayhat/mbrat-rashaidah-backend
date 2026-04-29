@@ -108,4 +108,9 @@ export class CreateProjectDto {
   @IsUUID('4', { each: true })
   @IsOptional()
   mediaIds?: string[];
+
+  // Pin project to show at top
+  @IsOptional()
+  @IsBoolean()
+  isPinned?: boolean;
 }

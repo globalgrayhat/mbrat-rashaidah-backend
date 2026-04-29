@@ -47,19 +47,11 @@ import { Donation } from '../donations/entities/donation.entity';
  *
  * Supported Providers:
  * - MyFatoorah: Middle East payment gateway (default, actively used)
- * Unsupported providers (removed):
- * - PayMob: Egypt and Middle East payment gateway (optional)
- * - Stripe: Global payment gateway (optional)
  *
  * All providers are optional. Configure via environment variables to enable:
  * - MyFatoorah: MYFATOORAH_API_KEY
- * *
- * Providers are automatically registered if configured.
  *
- * To remove a provider:
- * 1. Remove it from providers array below
- * 2. Remove it from PaymentService constructor injection
- * 3. Remove environment variables
+ * Providers are automatically registered if configured.
  *
  * To add a new provider:
  * 1. Create provider service implementing IPaymentProvider

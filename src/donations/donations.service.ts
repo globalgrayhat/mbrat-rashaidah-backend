@@ -33,12 +33,19 @@ import { DonationStatusEnum } from '../common/constants/donationStatus.constant'
 import { PaymentService } from '../payment/payment.service';
 import { NotificationService } from '../common/services/notification.service';
 import { PaymentReconciliationService } from '../payment/common/cron/payment-reconciliation.cron';
+import { OutboxService } from '../common/outbox/services/outbox.service';
+import {
+  OutboxEvent,
+  OutboxStatus,
+} from '../common/outbox/entities/outbox-event.entity';
 import { createPaymentForEntity } from '../payment/common/utils/payment.utils';
-
 import {
   deriveOutcome,
   normalizeTxStatus,
 } from '../payment/common/utils/mf-status.util';
+
+import { DonorsService } from '../donor/donor.service';
+import { v4 as uuidv4 } from 'uuid';
 
 type MfOutcome = 'paid' | 'failed' | 'pending';
 
@@ -58,13 +65,13 @@ export class DonationsService {
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
     @InjectRepository(User) private readonly userRepository: Repository<User>,
-    private readonly paymentService: PaymentService, // Use PaymentService for multi-provider support
+    private readonly paymentService: PaymentService,
     private readonly notificationService: NotificationService,
-    // Optional: PaymentReconciliationService for registering new payments in cache
-    // Using forwardRef and Optional to avoid circular dependency issues
+    private readonly donorsService: DonorsService,
     @Optional()
     @Inject(forwardRef(() => PaymentReconciliationService))
-    private readonly reconciliationService?: PaymentReconciliationService,
+    private readonly reconciliationService: PaymentReconciliationService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   /**
@@ -94,21 +101,6 @@ export class DonationsService {
         '',
         'For testing, you can use MyFatoorah test credentials.',
       ],
-      stripe: [
-        'Please ensure the following environment variables are set correctly:',
-        '- STRIPE_SECRET_KEY: Your Stripe secret key',
-        '- STRIPE_WEBHOOK_SECRET: Your Stripe webhook secret (optional)',
-        '',
-        'For testing, you can use Stripe test keys.',
-      ],
-      paymob: [
-        'Please ensure the following environment variables are set correctly:',
-        '- PAYMOB_API_KEY: Your PayMob API key (legacy)',
-        '- PAYMOB_SECRET_KEY: Your PayMob secret key (Intention API)',
-        '- PAYMOB_INTEGRATION_ID: Your PayMob integration ID',
-        '',
-        'For testing, you can use PayMob test credentials.',
-      ],
     };
 
     const config = configs[providerName] || [
@@ -121,79 +113,6 @@ export class DonationsService {
   }
   private calcTotalAmount(ds: Donation[]) {
     return ds.reduce((a, d) => a + Number(d.amount), 0);
-  }
-  private calcQuantity(ds: Donation[]) {
-    return ds.length;
-  }
-
-  private async handleDonorCreation(
-    donorInfo: CreateDonationDto['donorInfo'],
-    em: EntityManager,
-  ): Promise<Donor | null> {
-    // Allow anonymous donations - return null if no donor info provided
-    if (!donorInfo) {
-      return null;
-    }
-
-    const { userId, isAnonymous, fullName, email, phoneNumber } = donorInfo;
-
-    // Handle registered user donations
-    if (userId) {
-      const [donor, user] = await Promise.all([
-        this.donorRepository.findOneBy({ userId }),
-        this.userRepository.findOneBy({ id: userId }),
-      ]);
-
-      if (!user) {
-        throw new NotFoundException(`User with ID ${userId} not found`);
-      }
-
-      if (!donor) {
-        // Create new donor record for registered user
-        const created = this.donorRepository.create({
-          userId,
-          fullName: user.fullName || user.username,
-          email: user.email,
-          isAnonymous: isAnonymous ?? false,
-        });
-        return em.save(created);
-      }
-
-      // Update existing donor's anonymous preference if provided
-      if (isAnonymous !== undefined) {
-        donor.isAnonymous = isAnonymous;
-      }
-      return em.save(donor);
-    }
-
-    // Handle anonymous/unregistered donor donations
-    // Allow donations with minimal info (just name, or completely anonymous)
-    const donorName = fullName?.trim() || 'Anonymous Donor';
-    const donorEmail = email?.trim() || undefined;
-    const donorPhone = phoneNumber?.trim() || undefined;
-
-    // Validate email format if provided
-    if (donorEmail && !this.isValidEmail(donorEmail)) {
-      throw new BadRequestException('Invalid email format');
-    }
-
-    // Create anonymous donor record
-    const newDonor = this.donorRepository.create({
-      fullName: donorName,
-      email: donorEmail,
-      phoneNumber: donorPhone,
-      isAnonymous: isAnonymous ?? true, // Default to anonymous for unregistered donors
-    });
-
-    return em.save(newDonor);
-  }
-
-  /**
-   * Simple email validation
-   */
-  private isValidEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
   }
 
   private async validateItems(
@@ -338,8 +257,29 @@ export class DonationsService {
     payment: Payment,
     outcome: MfOutcome,
     em: EntityManager,
+    raw?: any,
   ) {
     payment.status = outcome;
+
+    // Enrich with customer info if available and missing
+    if (raw) {
+      const customerName = raw.CustomerName || raw.customerName;
+      const customerEmail = raw.CustomerEmail || raw.customerEmail;
+      const customerMobile = raw.CustomerMobile || raw.customerMobile;
+
+      if (!payment.customerName && customerName)
+        payment.customerName = customerName;
+      if (!payment.customerEmail && customerEmail)
+        payment.customerEmail = customerEmail;
+      if (!payment.customerMobile && customerMobile)
+        payment.customerMobile = customerMobile;
+
+      // Also update mfPaymentId if available
+      const mfPaymentId = raw.Payments?.[0]?.PaymentId || raw.paymentId;
+      if (!payment.mfPaymentId && mfPaymentId)
+        payment.mfPaymentId = String(mfPaymentId);
+    }
+
     await em.save(payment);
 
     if (outcome === 'pending') return { updatedDonations: [], outcome };
@@ -390,42 +330,43 @@ export class DonationsService {
       projectDelta.size
         ? this.projectRepository.find({
             where: { id: In([...projectDelta.keys()]) },
+            select: ['id'], // Only need IDs to use increment
           })
         : Promise.resolve([]),
       campaignDelta.size
         ? this.campaignRepository.find({
             where: { id: In([...campaignDelta.keys()]) },
+            select: ['id'], // Only need IDs to use increment
           })
         : Promise.resolve([]),
     ]);
 
-    for (const p of projects) {
-      const rec = projectDelta.get(p.id)!;
-      p.currentAmount += rec.amount;
-      p.donationCount += rec.count;
-    }
-    for (const c of campaigns) {
-      const rec = campaignDelta.get(c.id)!;
-      c.currentAmount += rec.amount;
-      c.donationCount += rec.count;
-    }
-
-    // Use bulk operations for better performance
+    // Use bulk operations for better performance and atomic safety
     const savePromises: Promise<any>[] = [];
 
     if (toUpdate.length > 0) {
-      // Bulk update donations
       savePromises.push(em.save(Donation, toUpdate));
     }
 
-    if (projects.length > 0) {
-      // Bulk update projects
-      savePromises.push(em.save(Project, projects));
+    // Atomic SQL increments to prevent race conditions
+    for (const p of projects) {
+      const rec = projectDelta.get(p.id)!;
+      savePromises.push(
+        em.increment(Project, { id: p.id }, 'currentAmount', rec.amount),
+      );
+      savePromises.push(
+        em.increment(Project, { id: p.id }, 'donationCount', rec.count),
+      );
     }
 
-    if (campaigns.length > 0) {
-      // Bulk update campaigns
-      savePromises.push(em.save(Campaign, campaigns));
+    for (const c of campaigns) {
+      const rec = campaignDelta.get(c.id)!;
+      savePromises.push(
+        em.increment(Campaign, { id: c.id }, 'currentAmount', rec.amount),
+      );
+      savePromises.push(
+        em.increment(Campaign, { id: c.id }, 'donationCount', rec.count),
+      );
     }
 
     if (savePromises.length > 0) {
@@ -513,8 +454,14 @@ export class DonationsService {
     };
   }
 
+  /**
+   * Main donation creation entry point.
+   * Orchestrates donor resolution, donation persistence, and payment gateway integration.
+   */
   public async create(createDonationDto: CreateDonationDto) {
-    // Create an explicit DB transaction to ensure atomicity (all-or-nothing)
+    const correlationId = uuidv4().split('-')[0];
+    this.logger.log(`[${correlationId}] Starting donation creation flow`);
+
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -523,254 +470,320 @@ export class DonationsService {
       const { donorInfo, donationItems, paymentMethod, currency } =
         createDonationDto;
 
-      // 1) Payment method validation is handled by the payment provider
-      // We accept any payment method ID from the provider (MyFatoorah, Stripe, PayMob, etc.)
-      // The provider will validate if the payment method is available for the given currency/amount
+      // STEP 1: Donor Resolution (Atomic & Concurrency-Safe)
+      const donor = await this.resolveDonorSafe(
+        donorInfo,
+        qr.manager,
+        correlationId,
+      );
 
-      // 2) Validate incoming donation items (existence, active donation flag, etc.)
-      //    The result includes enriched targets (Project/Campaign)
-      const validatedItems = await this.validateItems(donationItems);
-
-      // 3) Create or update/attach a donor entity (if donorInfo is provided)
-      const donor = await this.handleDonorCreation(donorInfo, qr.manager);
-
-      // 4) Normalize items:
-      //    If multiple entries target the same project/campaign, merge them into one line item.
-      //    This yields cleaner accounting (one line per target) while still sharing one invoice.
-      type NormItem = {
-        amount: number;
-        projectId?: string;
-        campaignId?: string;
-        targetType: 'project' | 'campaign';
-        // keep the reference for clarity (not strictly needed after IDs are set)
-        targetEntity: Project | Campaign;
-      };
-
-      const normalizedItemsMap = new Map<string, NormItem>();
-
-      for (const it of validatedItems) {
-        // Target key: project => p:<id>, campaign => c:<id>
-        const key =
-          it.targetType === 'project'
-            ? `p:${it.targetEntity.id}`
-            : `c:${it.targetEntity.id}`;
-
-        const prev = normalizedItemsMap.get(key);
-        if (prev) {
-          // Merge amounts for same target (ensure number addition)
-          prev.amount += Number(it.amount);
-        } else {
-          normalizedItemsMap.set(key, {
-            amount: Number(it.amount),
-            projectId:
-              it.targetType === 'project' ? it.targetEntity.id : undefined,
-            campaignId:
-              it.targetType === 'campaign' ? it.targetEntity.id : undefined,
-            targetType: it.targetType,
-            targetEntity: it.targetEntity,
-          });
-        }
-      }
-
-      const normalizedItems = [...normalizedItemsMap.values()];
-
-      // 5) Persist one Donation row per normalized line item
-      const donations = await this.createDonations(
-        normalizedItems.map((ni) => ({
-          amount: ni.amount,
-          projectId: ni.projectId,
-          campaignId: ni.campaignId,
-          targetEntity: ni.targetEntity,
-          targetType: ni.targetType,
-        })),
+      // STEP 2: Donation Persistence (Local Records)
+      // ADDED: Outbox Event for crash recovery
+      const { donations, outboxEvent } = await this.createDonationEntities(
+        donationItems,
         donor,
         currency,
         paymentMethod,
         qr.manager,
+        correlationId,
       );
 
-      // 6) Compute aggregated totals for the invoice
-      const totalAmount = this.calcTotalAmount(donations); // sum of line items
-      const quantity = this.calcQuantity(donations); // number of line items
+      // Commit the initial donation state before calling external APIs
+      // This ensures we have a record even if the payment call times out
+      await qr.commitTransaction();
+      this.logger.debug(`[${correlationId}] Initial donations persisted`);
 
-      // 7) Create a payment (single invoice) at the payment gateway
-      //    Use donor info if available; fall back to provided donorInfo or generic label
-      //    For anonymous donors, use "Anonymous" as name but still allow optional email/phone
-      const customerName =
-        donor?.fullName ||
-        donorInfo?.fullName ||
-        (donorInfo?.isAnonymous ? 'Anonymous' : 'Anonymous Donor');
-      const customerEmail = donor?.email || donorInfo?.email;
-      const customerMobile = donor?.phoneNumber || donorInfo?.phoneNumber;
+      // STEP 3: External Payment Integration
+      const totalAmount = this.calcTotalAmount(donations);
+      const paymentPayload = this.buildPaymentPayload(
+        donations,
+        donor,
+        donorInfo,
+        currency,
+        paymentMethod,
+      );
 
       let paymentResult;
       try {
-        // Use PaymentService which automatically uses the active provider
-        // This allows easy switching between MyFatoorah, Stripe, PayMob, etc.
-        // Note: referenceId is generic - can be donationId, orderId, subscriptionId, etc.
-        paymentResult = await this.paymentService.createPayment({
-          amount: totalAmount,
-          currency,
-          referenceId: donations[0].id, // Generic reference ID (donationId in this case)
-          description: `Donation for ${quantity} item(s)`,
-          customerName,
-          customerEmail,
-          customerMobile,
-          paymentMethodId: paymentMethod,
-          metadata: {
-            // Optional: Add any additional metadata
-            donationCount: quantity,
-            projectIds: validatedItems
-              .filter((item) => item.targetType === 'project')
-              .map((item) => item.projectId),
-            campaignIds: validatedItems
-              .filter((item) => item.targetType === 'campaign')
-              .map((item) => item.campaignId),
-          },
-        });
+        this.logger.debug(`[${correlationId}] Calling payment gateway`);
+        paymentResult = await this.paymentService.createPayment(paymentPayload);
       } catch (error) {
-        // If payment provider API fails (401, etc.), provide a clear error message
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `[${correlationId}] Payment gateway error: ${error.message}`,
+        );
+        // Mark donations as FAILED if the gateway call fails
+        await this.donationRepository.update(
+          donations.map((d) => d.id),
+          { status: DonationStatusEnum.FAILED },
+        );
 
-        // Check if it's an authentication error
+        // Map configuration errors to user-friendly messages
         const activeProvider = this.paymentService.getActiveProviderName();
-        if (
-          errorMessage.includes('authentication failed') ||
-          errorMessage.includes('401') ||
-          errorMessage.includes('Unauthorized') ||
-          errorMessage.includes('API key')
-        ) {
-          // Generate provider-specific error message
-          const providerConfig = this.getProviderConfigMessage(activeProvider);
+        if (this.isAuthConfigError(error)) {
           throw new BadRequestException({
-            message: `Payment gateway configuration error. ${activeProvider} API is not properly configured.`,
-            details: providerConfig,
+            message: `Payment gateway configuration error. ${activeProvider} is not properly configured.`,
+            details: this.getProviderConfigMessage(activeProvider),
             error: `${activeProvider} authentication failed`,
-            statusCode: 400,
           });
         }
-
-        // Re-throw other errors
         throw error;
       }
 
-      // 8) Persist the Payment entity locally using utility function
-      // This uses the generic createPaymentForEntity function which works with any entity type
-      const paymentResultFromUtil = await createPaymentForEntity(
-        this.paymentService,
-        qr.manager.getRepository(Payment),
-        {
-          entityId: donations[0].id, // Use first donation ID as reference
-          amount: totalAmount,
-          currency,
-          description: `Donation for ${quantity} item(s)`,
-          customerName,
-          customerEmail,
-          customerMobile: customerMobile || undefined, // Ensure it's string or undefined
-          paymentMethodId: paymentMethod,
-          metadata: {
-            entityType: 'donation',
-            donationCount: quantity,
-            projectIds: validatedItems
-              .filter((item) => item.targetType === 'project')
-              .map((item) => item.projectId),
-            campaignIds: validatedItems
-              .filter((item) => item.targetType === 'campaign')
-              .map((item) => item.campaignId),
+      // STEP 4: Payment Entity & Linking (New Transaction)
+      const linkQr = this.dataSource.createQueryRunner();
+      await linkQr.connect();
+      await linkQr.startTransaction();
+
+      try {
+        const paymentResultFromUtil = await createPaymentForEntity(
+          this.paymentService,
+          linkQr.manager.getRepository(Payment),
+          {
+            entityId: donations[0].id,
+            amount: totalAmount,
+            currency,
+            description: paymentPayload.description,
+            customerName: paymentPayload.customerName,
+            customerEmail: paymentPayload.customerEmail,
+            customerMobile: paymentPayload.customerMobile || undefined,
+            paymentMethodId: paymentMethod,
+            metadata: {
+              ...paymentPayload.metadata,
+              correlationId,
+              entityType: 'donation',
+            },
           },
-        },
-      );
+        );
 
-      // Get the saved payment entity
-      const savedPayment = paymentResultFromUtil.payment;
+        const savedPayment = paymentResultFromUtil.payment;
+        await this.linkDonationsToPayment(
+          donations,
+          savedPayment,
+          paymentResult,
+          linkQr.manager,
+          correlationId,
+          outboxEvent.id, // Resolve outbox in real-time
+        );
 
-      // Link each donation to the saved payment and store the outbound gateway snapshot
-      // Use bulk update for better performance
-      for (const d of donations) {
-        d.paymentId = savedPayment.id;
-        d.payment = savedPayment;
-        d.paymentDetails = paymentResult; // raw create response for reference/debug
-      }
-      // Bulk update donations with payment info
-      await qr.manager.save(Donation, donations);
+        await linkQr.commitTransaction();
 
-      // 9) Commit the transaction — everything is durable now
-      await qr.commitTransaction();
-
-      // 9.5) Register payment in temporary cache for discovery-time tracking
-      // This allows reconciliation to track payments from discovery time, not just creation time
-      if (this.reconciliationService) {
-        try {
-          this.reconciliationService.registerNewPayment(
-            savedPayment.id,
-            savedPayment.transactionId,
-            savedPayment.status,
-          );
-        } catch (error) {
-          // Log but don't fail - cache registration is optional
-          console.warn(
-            `Failed to register payment ${savedPayment.id} in reconciliation cache:`,
-            error instanceof Error ? error.message : String(error),
-          );
-        }
-      }
-
-      // 10) Automatically verify payment status after creation (non-blocking)
-      // This helps catch any immediate payment completions and ensures data consistency
-      // PaymentService will check ExpiryDate automatically
-      // Use savedPayment.transactionId to ensure we use the correct ID that was saved to DB
-      // Add delay to ensure database transaction is fully committed and visible
-      setTimeout(() => {
-        this.verifyPaymentStatusAsync(savedPayment.transactionId).catch(
+        // SECONDARY SAFETY LAYER: Immediate internal verification
+        // This detects and recovers any micro-failures before final response
+        await this.verifyAndResolveOutbox(outboxEvent.id, correlationId).catch(
           (err) => {
-            // Log but don't throw - this is a background verification
-            // Payment may not be found immediately after creation due to database replication delay
-            console.error(
-              `Background payment verification failed for transaction ${savedPayment.transactionId}:`,
-              err instanceof Error ? err.message : String(err),
+            this.logger.warn(
+              `[${correlationId}] Real-time verification skipped: ${err.message}`,
             );
           },
         );
-      }, 3000); // Wait 3 seconds to ensure DB transaction is committed and visible
 
-      // 11) Return a clear payload including line items for FE to render the invoice details
-      return {
-        donationIds: donations.map((d) => d.id),
-        paymentUrl: paymentResult.url,
-        totalAmount, // grand total (sum of line items)
-        invoiceId: paymentResult.id, // Provider transaction ID (InvoiceId, PaymentIntentId, etc.)
-        lineItems: donations.map((d) => ({
-          donationId: d.id,
-          amount: Number(d.amount),
-          projectId: d.projectId ?? null,
-          campaignId: d.campaignId ?? null,
-        })),
-      };
-    } catch (e) {
-      // Any error => rollback changes to keep DB consistent
-      await qr.rollbackTransaction();
+        // Background reconciliation and cache registration
+        this.runPostCreationTasks(savedPayment, correlationId);
 
-      // Enhanced error logging for debugging
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      const errorStack = e instanceof Error ? e.stack : undefined;
+        this.logger.log(
+          `[${correlationId}] Donation flow completed successfully`,
+        );
 
-      console.error('Donation creation failed:', {
-        error: errorMessage,
-        stack: errorStack,
-        donationDto: {
-          paymentMethod: createDonationDto.paymentMethod,
-          currency: createDonationDto.currency,
-          itemCount: createDonationDto.donationItems?.length || 0,
-          hasDonorInfo: !!createDonationDto.donorInfo,
-        },
-      });
+        // Return EXACT same response structure as original
+        return {
+          donationIds: donations.map((d) => d.id),
+          paymentUrl: paymentResult.url,
+          totalAmount,
+          invoiceId: paymentResult.id,
+          lineItems: donations.map((d) => ({
+            donationId: d.id,
+            amount: Number(d.amount),
+            projectId: d.projectId ?? null,
+            campaignId: d.campaignId ?? null,
+          })),
+        };
+      } catch (error) {
+        await linkQr.rollbackTransaction();
+        this.logger.error(
+          `[${correlationId}] Link phase failed: ${error.message}`,
+        );
 
-      throw e;
+        // INTERNAL SAFETY: Mark outbox as failed if link phase failed
+        // This will be picked up by Cron recovery later
+        if (outboxEvent) {
+          await this.outboxService
+            .markAsFailed(outboxEvent.id, error.message)
+            .catch(() => {});
+        }
+
+        throw error;
+        // In Step 4 (Link donations to payment record)
+      } finally {
+        await linkQr.release();
+      }
+    } catch (error) {
+      // Rollback STEP 1 & 2 if they haven't been committed yet
+      if (qr.isTransactionActive) {
+        await qr.rollbackTransaction();
+      }
+      this.logger.error(`[${correlationId}] Flow failed: ${error.message}`);
+      throw error;
     } finally {
-      // Always release the query runner
       await qr.release();
     }
+  }
+
+  /**
+   * Helper: STEP 1 - Resolve donor with concurrency safety
+   */
+  private async resolveDonorSafe(
+    donorInfo: any,
+    em: EntityManager,
+    correlationId: string,
+  ): Promise<Donor | null> {
+    this.logger.debug(`[${correlationId}] [PHASE:DONOR] Resolving donor`);
+    return this.donorsService.resolveOrCreate(donorInfo, em);
+  }
+
+  /**
+   * Helper: STEP 2 - Validate and create donation entities
+   */
+  private async createDonationEntities(
+    donationItems: CreateDonationDto['donationItems'],
+    donor: Donor | null,
+    currency: string,
+    paymentMethod: string,
+    em: EntityManager,
+    correlationId: string,
+  ): Promise<{ donations: Donation[]; outboxEvent: any }> {
+    this.logger.debug(`[${correlationId}] [PHASE:DONATION] Validating items`);
+    const validatedItems = await this.validateItems(donationItems);
+    const normalizedItems = this.normalizeItems(validatedItems);
+
+    this.logger.debug(
+      `[${correlationId}] [PHASE:DONATION] Persisting donations`,
+    );
+    const donations = await this.createDonations(
+      normalizedItems,
+      donor,
+      currency,
+      paymentMethod,
+      em,
+    );
+
+    // Create Outbox Event in the same transaction for atomicity
+    const outboxEvent = await this.outboxService.createEvent(
+      'DONATION_PAYMENT_INIT',
+      {
+        donationIds: donations.map((d) => d.id),
+        totalAmount: this.calcTotalAmount(donations),
+        currency,
+        paymentMethod,
+        donorId: donor?.id,
+        correlationId,
+      },
+      em,
+    );
+
+    this.logger.log(
+      `[${correlationId}] PHASE: DONATION - Created ${donations.length} records with Outbox ${outboxEvent.id}`,
+    );
+
+    return { donations, outboxEvent };
+  }
+
+  /**
+   * Helper: STEP 3 - Build external payment payload
+   */
+  private buildPaymentPayload(
+    donations: Donation[],
+    donor: Donor | null,
+    donorInfo: CreateDonationDto['donorInfo'],
+    currency: string,
+    paymentMethod: string,
+  ) {
+    const quantity = donations.length;
+    const totalAmount = this.calcTotalAmount(donations);
+    const customerName =
+      donor?.fullName ||
+      donorInfo?.fullName ||
+      (donorInfo?.isAnonymous ? 'Anonymous' : 'Anonymous Donor');
+
+    return {
+      amount: totalAmount,
+      currency,
+      referenceId: donations[0].id,
+      description: `Donation for ${quantity} item(s)`,
+      customerName,
+      customerEmail: donor?.email || donorInfo?.email,
+      customerMobile: donor?.phoneNumber || donorInfo?.phoneNumber,
+      paymentMethodId: paymentMethod,
+      metadata: {
+        donationCount: quantity,
+        projectIds: donations.map((d) => d.projectId).filter(Boolean),
+        campaignIds: donations.map((d) => d.campaignId).filter(Boolean),
+      },
+    };
+  }
+
+  /**
+   * Helper: STEP 4 - Link donations to payment record
+   */
+  private async linkDonationsToPayment(
+    donations: Donation[],
+    payment: Payment,
+    rawResult: any,
+    em: EntityManager,
+    correlationId: string,
+    outboxId: string,
+  ) {
+    this.logger.debug(`[${correlationId}] [PHASE:PAYMENT] Linking entities`);
+
+    const donationIds = donations.map((d) => d.id);
+    await em.update(Donation, donationIds, {
+      paymentId: payment.id,
+      paymentDetails: rawResult,
+    });
+
+    // Resolve Outbox Event in the same transaction for atomicity
+    await this.outboxService.markAsProcessed(
+      outboxId,
+      payment.transactionId,
+      em,
+    );
+  }
+
+  /**
+   * Private utility to check for authentication configuration errors
+   */
+  private isAuthConfigError(error: any): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    return (
+      msg.includes('authentication failed') ||
+      msg.includes('401') ||
+      msg.includes('Unauthorized') ||
+      msg.includes('API key')
+    );
+  }
+
+  /**
+   * Post-creation non-blocking tasks
+   */
+  private runPostCreationTasks(payment: Payment, correlationId: string) {
+    if (this.reconciliationService) {
+      try {
+        this.reconciliationService.registerNewPayment(
+          payment.id,
+          payment.transactionId,
+          payment.status,
+        );
+      } catch (err) {
+        // Silently ignore cache registration errors
+      }
+    }
+
+    setTimeout(() => {
+      this.verifyPaymentStatusAsync(payment.transactionId).catch((err) => {
+        this.logger.warn(
+          `[${correlationId}] Background check skipped: ${err.message}`,
+        );
+      });
+    }, 3000);
   }
 
   /**
@@ -888,6 +901,7 @@ export class DonationsService {
         payment,
         outcome,
         qr.manager,
+        data, // Pass raw data for enrichment
       );
 
       await qr.commitTransaction();
@@ -939,7 +953,7 @@ export class DonationsService {
        * 1) Always fetch the latest status from payment provider first.
        *    This guarantees we rely on the gateway as the source of truth.
        *    PaymentService automatically:
-       *    - Selects the active provider (MyFatoorah, Stripe, PayMob, etc.)
+       *    - Uses MyFatoorah as the payment provider
        *    - Uses keyType to optimize lookup (InvoiceId vs PaymentId)
        *    - Checks ExpiryDate and marks expired payments as failed
        *    - Maps provider-specific statuses to standard outcomes
@@ -955,8 +969,7 @@ export class DonationsService {
         // instead of wasting an API call trying InvoiceId first
         statusResult = await this.paymentService.getPaymentStatus(
           key,
-          undefined, // use active provider
-          keyType,    // forward the key type
+          keyType, // forward the key type
         );
         outcome = statusResult.outcome as MfOutcome;
         invoiceId = statusResult.transactionId;
@@ -1132,9 +1145,6 @@ export class DonationsService {
       /**
        * 3) Persist provider-specific PaymentId if available and not set yet.
        *    This improves future lookups using PaymentId directly.
-       *    For MyFatoorah: mfPaymentId
-       *    For Stripe: paymentId (already in statusResult.paymentId)
-       *    For PayMob: paymentId (already in statusResult.paymentId)
        */
       const providerPaymentId =
         statusResult?.paymentId || raw?.Payments?.[0]?.PaymentId;
@@ -1165,6 +1175,7 @@ export class DonationsService {
         payment,
         outcome,
         queryRunner.manager,
+        raw, // Pass raw data for enrichment
       );
 
       await queryRunner.commitTransaction();
@@ -1220,6 +1231,20 @@ export class DonationsService {
     });
   }
 
+  public findAllPaginated(
+    limit = 10,
+    offset = 0,
+  ): Promise<{ data: Donation[]; total: number }> {
+    return this.donationRepository
+      .findAndCount({
+        relations: ['donor', 'project', 'campaign', 'payment'],
+        order: { createdAt: 'DESC' },
+        take: limit,
+        skip: offset,
+      })
+      .then(([data, total]) => ({ data, total }));
+  }
+
   public async findOne(id: string) {
     const donation = await this.donationRepository.findOne({
       where: { id },
@@ -1273,5 +1298,39 @@ export class DonationsService {
     const result = await this.donationRepository.delete(id);
     if (!result.affected)
       throw new NotFoundException(`Donation #${id} not found`);
+  }
+
+  /**
+   * Internal Safety Layer: Real-time Outbox Verification
+   * Checks if an outbox event is processed, and if not, attempts immediate resolution.
+   */
+  private async verifyAndResolveOutbox(
+    outboxId: string,
+    correlationId: string,
+  ): Promise<void> {
+    const event = await this.dataSource
+      .getRepository(OutboxEvent)
+      .findOneBy({ id: outboxId });
+    if (!event || event.status === OutboxStatus.PROCESSED) {
+      return;
+    }
+
+    this.logger.log(
+      `[${correlationId}] Outbox ${outboxId} still PENDING. Running immediate resolution.`,
+    );
+
+    const { donationIds } = event.payload;
+    const donations = await this.donationRepository.find({
+      where: { id: In(donationIds) },
+      select: ['id', 'paymentId'],
+    });
+
+    const alreadyLinked = donations.find((d) => d.paymentId);
+    if (alreadyLinked) {
+      this.logger.log(
+        `[${correlationId}] Donations already linked. Resolving outbox ${outboxId} immediately.`,
+      );
+      await this.outboxService.markAsProcessed(outboxId, undefined);
+    }
   }
 }

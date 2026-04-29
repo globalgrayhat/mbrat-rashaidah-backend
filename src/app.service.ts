@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { AppConfigService } from './config/config.service';
+import { HomeFeedService } from './common/home-feed.service';
 
 @Injectable()
 export class AppService {
-  constructor(private readonly configService: AppConfigService) {}
+  constructor(
+    private readonly configService: AppConfigService,
+    private readonly homeFeedService: HomeFeedService,
+  ) {}
 
   getHealth(): {
     status: string;
@@ -17,5 +21,9 @@ export class AppService {
       message: `${appName} backend is up and running smoothly.`,
       appName,
     };
+  }
+
+  getHomeFeed(limit = 10, offset = 0) {
+    return this.homeFeedService.getFeed(limit, offset);
   }
 }

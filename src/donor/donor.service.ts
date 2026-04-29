@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Donor } from './entities/donor.entity';
 import { CreateDonorDto } from './dto/create-donor.dto';
 import { UpdateDonorDto } from './dto/update-donor.dto';
@@ -19,6 +19,100 @@ export class DonorsService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
+
+  /**
+   * Resolves an existing donor or creates a new one safely.
+   * Handles concurrency by retrying the find if a unique constraint violation occurs.
+   *
+   * @param donorInfo Donor details from the donation request
+   * @param em EntityManager to use within the donation transaction
+   */
+  async resolveOrCreate(
+    donorInfo: {
+      userId?: string;
+      email?: string;
+      fullName?: string;
+      phoneNumber?: string;
+      isAnonymous?: boolean;
+    },
+    em: EntityManager,
+  ): Promise<Donor | null> {
+    if (!donorInfo) return null;
+
+    const { userId, isAnonymous, fullName, phoneNumber } = donorInfo;
+    const email = donorInfo.email?.toLowerCase().trim();
+
+    // 1. Registered User Path: userId is the primary identifier
+    if (userId) {
+      // Check if donor already exists for this user
+      let donor = await em.findOne(Donor, { where: { userId } });
+      if (donor) {
+        // Sync anonymity preference if provided
+        if (isAnonymous !== undefined && donor.isAnonymous !== isAnonymous) {
+          donor.isAnonymous = isAnonymous;
+          return await em.save(donor);
+        }
+        return donor;
+      }
+
+      // Resolve user details for the new donor record
+      const user = await em.findOne(User, { where: { id: userId } });
+      if (!user)
+        throw new NotFoundException(`User with ID ${userId} not found`);
+
+      donor = this.donorRepository.create({
+        userId,
+        fullName: fullName || user.fullName || user.username,
+        email: email || user.email,
+        isAnonymous: isAnonymous ?? false,
+      });
+
+      try {
+        return await em.save(donor);
+      } catch (error) {
+        // Handle race condition: another request might have created the donor record
+        const retryDonor = await em.findOne(Donor, { where: { userId } });
+        if (retryDonor) return retryDonor;
+        throw error;
+      }
+    }
+
+    // 2. Guest Donor Path: use email as identifier for non-registered users
+    if (email) {
+      // Try to find an existing guest donor with this email
+      let donor = await em.findOne(Donor, {
+        where: { email, userId: null } as any,
+      });
+      if (donor) return donor;
+
+      donor = this.donorRepository.create({
+        fullName: fullName?.trim() || 'Guest Donor',
+        email,
+        phoneNumber: phoneNumber?.trim(),
+        isAnonymous: isAnonymous ?? false,
+      });
+
+      try {
+        return await em.save(donor);
+      } catch (error) {
+        // Fallback for concurrent guest creation
+        const retryDonor = await em.findOne(Donor, {
+          where: { email, userId: null } as any,
+        });
+        if (retryDonor) return retryDonor;
+        throw error;
+      }
+    }
+
+    // 3. Anonymous Path: create a one-time anonymous record
+    const anonymousDonor = this.donorRepository.create({
+      fullName: fullName?.trim() || 'Anonymous Donor',
+      isAnonymous: true,
+      phoneNumber: phoneNumber?.trim(),
+    });
+
+    return await em.save(anonymousDonor);
+  }
 
   async create(createDonorDto: CreateDonorDto): Promise<Donor> {
     const { userId, email, isAnonymous } = createDonorDto;

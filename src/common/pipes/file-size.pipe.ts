@@ -19,4 +19,4 @@ export class FileSizeValidationPipe implements PipeTransform {
 
     return file;
   }
-} 
+}

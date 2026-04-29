@@ -7,11 +7,13 @@ import {
   OneToMany,
   OneToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Donation } from '../../donations/entities/donation.entity';
 import { User } from '../../user/entities/user.entity';
 
 @Entity('donors')
+@Index('idx_donors_email', ['email'], { unique: false })
 export class Donor {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -19,7 +21,15 @@ export class Donor {
   @Column({ type: 'text', nullable: true })
   fullName?: string;
 
-  @Column({ nullable: true, unique: false }) // Not unique because multiple anonymous donors might use similar general emails or none at all.
+  /**
+   * Donor email - NOT unique at DB level because:
+   * 1. MySQL doesn't allow UNIQUE on nullable columns
+   * 2. Anonymous donors may share emails
+   *
+   * UNIQUE constraint is enforced at APPLICATION level + migration
+   * This column stores lowercase email for case-insensitive matching.
+   */
+  @Column({ nullable: true })
   email?: string;
 
   @Column({ nullable: true, length: 50 })
@@ -28,11 +38,11 @@ export class Donor {
   @Column({ default: false })
   isAnonymous: boolean;
 
-  @OneToOne(() => User, { nullable: true, onDelete: 'SET NULL' }) // If User is deleted, set donorId to null
+  @OneToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'userId' })
   user?: User;
 
-  @Column('uuid', { nullable: true, unique: true }) // userId should be unique if a donor links to a specific user
+  @Column('uuid', { nullable: true, unique: true })
   userId?: string;
 
   @OneToMany(() => Donation, (donation) => donation.donor)

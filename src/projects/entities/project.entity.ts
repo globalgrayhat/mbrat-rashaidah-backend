@@ -107,6 +107,9 @@ export class Project {
   @Column({ default: true })
   isProgressActive: boolean;
 
+  @Column({ default: false })
+  isPinned: boolean;
+
   @Column({ default: true })
   isTargetAmountActive: boolean;
 

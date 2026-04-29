@@ -77,6 +77,7 @@ export class CampaignsService {
       isProgressActive: otherFields.isProgressActive ?? true,
       isTargetAmountActive: otherFields.isTargetAmountActive ?? true,
       createdById: user.id,
+      isPinned: createCampaignDto.isPinned ?? false,
     });
 
     if (mediaIds.length > 0) {
@@ -103,6 +104,22 @@ export class CampaignsService {
       relations: ['category', 'media'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async findAllPaginated(
+    limit = 10,
+    offset = 0,
+  ): Promise<{ data: Campaign[]; total: number }> {
+    const [data, total] = await this.campaignRepository.findAndCount({
+      relations: ['category', 'media'],
+      order: {
+        isPinned: 'DESC',
+        createdAt: 'DESC',
+      },
+      take: limit,
+      skip: offset,
+    });
+    return { data, total };
   }
 
   async findOne(id: string): Promise<Campaign> {

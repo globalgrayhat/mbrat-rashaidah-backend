@@ -9,6 +9,7 @@ import {
   Patch,
   ParseUUIDPipe,
   Request,
+  Query,
 } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -44,6 +45,17 @@ export class ProjectsController {
   @Get()
   findAll() {
     return this.projectsService.findAll();
+  }
+
+  @Public()
+  @Get('paginated')
+  findAllPaginated(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 10;
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    return this.projectsService.findAllPaginated(parsedLimit, parsedOffset);
   }
 
   @Public()

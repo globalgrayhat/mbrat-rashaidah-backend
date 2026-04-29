@@ -15,11 +15,13 @@ import { AppConfigModule } from '../config/config.module';
 import { PaymentModule } from '../payment/payment.module';
 import { CurrencyService } from '../payment/common/services/currency.service';
 import { NotificationService } from '../common/services/notification.service';
+import { OutboxModule } from '../common/outbox/outbox.module';
 
 @Module({
   imports: [
     ProjectsModule,
     DonorModule,
+    OutboxModule,
     forwardRef(() => PaymentModule), // Use forwardRef to handle circular dependency
     TypeOrmModule.forFeature([
       Donation,

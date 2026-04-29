@@ -43,6 +43,25 @@ export class DonationItemDto {
  */
 export class CreateDonationDto {
   /**
+   * Optional idempotency key to prevent duplicate donations on retry.
+   * If provided and a donation with this key already exists, returns the existing donation.
+   * Client should generate a unique key (e.g., UUID) for each donation attempt.
+   * This field is optional - if not provided, keeps current behavior.
+   */
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+
+  /**
+   * Optional correlation ID for request tracing.
+   * If provided, this ID will be logged for tracing the request.
+   * Useful for debugging in production.
+   */
+  @IsOptional()
+  @IsString()
+  correlationId?: string;
+
+  /**
    * Payment method ID from the payment provider (e.g., MyFatoorah, Stripe, PayMob).
    * Can be provided as number or string by the client; we normalize it to string.
    * Stored as string in database to support any provider's payment method IDs.

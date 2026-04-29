@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Media } from './entities/media.entity';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
@@ -30,6 +32,21 @@ export class MediaService {
     });
   }
 
+  async findAllPaginated(
+    limit = 10,
+    offset = 0,
+  ): Promise<{ data: Media[]; total: number }> {
+    const [data, total] = await this.mediaRepository.findAndCount({
+      order: {
+        displayOrder: 'ASC',
+        createdAt: 'DESC',
+      },
+      take: limit,
+      skip: offset,
+    });
+    return { data, total };
+  }
+
   async findOne(id: string): Promise<Media> {
     const media = await this.mediaRepository.findOne({ where: { id } });
     if (!media) throw new NotFoundException(`Media with ID ${id} not found`);
@@ -43,7 +60,70 @@ export class MediaService {
   }
 
   async remove(id: string): Promise<void> {
-    const media = await this.findOne(id);
-    await this.mediaRepository.remove(media);
+    const media = await this.mediaRepository.findOne({
+      where: { id },
+      relations: ['projects', 'campaigns'],
+    });
+
+    if (!media) {
+      throw new NotFoundException(`Media with ID ${id} not found`);
+    }
+
+    // 1. Clear relations via Raw SQL to satisfy all foreign key constraints
+    // We target both the current tables and the legacy 'project_media' table mentioned in errors
+    const tablesToClear = ['project_media_items', 'campaign_media_items', 'project_media', 'campaign_media'];
+    
+    for (const table of tablesToClear) {
+      try {
+        await this.mediaRepository.query(`DELETE FROM ${table} WHERE mediaId = ?`, [id]);
+      } catch (err) {
+        // Ignore errors if table doesn't exist
+      }
+    }
+
+    // 2. Delete the physical file from disk
+    if (media.path) {
+      const filePath = path.join(process.cwd(), media.path);
+      try {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (err) {
+        console.error(`Failed to delete file ${filePath}:`, err.message);
+      }
+    }
+
+    // 3. Finally remove the record from database
+    await this.mediaRepository.delete(id);
+  }
+
+  async fixAllEncodings(): Promise<{ fixedCount: number }> {
+    const allMedia = await this.mediaRepository.find();
+    let fixedCount = 0;
+
+    for (const media of allMedia) {
+      const original = media.name;
+      // Heuristic: check for common garbled Arabic patterns (Ø, Ù, etc.)
+      if (
+        original &&
+        (original.includes('Ø') ||
+          original.includes('Ù') ||
+          original.includes('Ø§'))
+      ) {
+        try {
+          const fixed = Buffer.from(original, 'latin1').toString('utf8');
+          // Only save if it actually changed and is different from original
+          if (fixed !== original && !fixed.includes('')) {
+            media.name = fixed;
+            await this.mediaRepository.save(media);
+            fixedCount++;
+          }
+        } catch (e) {
+          // ignore failures for specific records
+        }
+      }
+    }
+
+    return { fixedCount };
   }
 }

@@ -24,15 +24,21 @@ const FAILED_TX_KEYWORDS = new Set([
   'CANCELED',
   'CANCELLED',
 ]);
+const PENDING_TX_KEYWORDS = new Set([
+  'INPROGRESS',
+  'PENDING',
+  'INITIATED',
+  'AUTHORIZE',
+  'AUTHORIZED',
+  'AUTHORISED',
+]);
 
 export function normalizeTxStatus(v: unknown): CanonicalTxStatus {
   if (v == null) return 'UNKNOWN';
   const s = String(v).trim().toUpperCase();
   if (PAID_TX_KEYWORDS.has(s)) return 'SUCCESS';
   if (FAILED_TX_KEYWORDS.has(s)) return 'FAILED';
-  if (s === 'INPROGRESS') return 'INPROGRESS';
-  if (s === 'AUTHORIZE' || s === 'AUTHORIZED' || s === 'AUTHORISED')
-    return 'AUTHORIZE';
+  if (PENDING_TX_KEYWORDS.has(s)) return 'INPROGRESS';
   if (s === 'CANCELED' || s === 'CANCELLED') return 'CANCELED';
   return 'UNKNOWN';
 }
@@ -66,6 +72,10 @@ export function deriveOutcome(
 
   if (tx.length > 0 && tx.every((t) => t === 'FAILED' || t === 'CANCELED')) {
     return 'failed';
+  }
+
+  if (tx.some((t) => t === 'INPROGRESS' || t === 'AUTHORIZE')) {
+    return 'pending';
   }
 
   const inv = normalizeInvoiceStatus(invoiceStatusUnknown);

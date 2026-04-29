@@ -16,7 +16,7 @@ export interface IMyFatoorahConfig {
 
   /**
    * MyFatoorah API URL
-   * Default: 'https://apitest.myfatoorah.com/v2/'
+   * Default: 'https://apitest.myfatoorah.com/v3/'
    */
   apiUrl?: string;
 
@@ -55,7 +55,7 @@ export interface IMyFatoorahConfig {
  * Default MyFatoorah configuration values
  */
 export const DEFAULT_MYFATOORAH_CONFIG: Partial<IMyFatoorahConfig> = {
-  apiUrl: 'https://apitest.myfatoorah.com/v2/',
+  apiUrl: 'https://apitest.myfatoorah.com/v3/',
   invoiceTtlMinutes: 60,
   timezone: 'Asia/Kuwait',
   ttlSkewSeconds: 30,

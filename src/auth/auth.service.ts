@@ -33,16 +33,19 @@ export class AuthService {
     }
 
     const hashedPassword: string = await bcrypt.hash(password, 10);
-    
+
     // Generate username from email (part before @)
     // Remove special characters and ensure it's valid
-    let baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-    
+    let baseUsername = email
+      .split('@')[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+
     // Ensure username is not empty and has minimum length
     if (!baseUsername || baseUsername.length < 3) {
       baseUsername = 'user' + Math.random().toString(36).substring(2, 8);
     }
-    
+
     // Check if username exists and append random suffix if needed
     let username = baseUsername;
     let attempts = 0;
@@ -52,7 +55,7 @@ export class AuthService {
       username = `${baseUsername}${Math.random().toString(36).substring(2, 6)}`;
       attempts++;
     }
-    
+
     // Create user with default values for fullName and username
     const createdUser = await this.usersService.create({
       email,

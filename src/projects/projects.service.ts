@@ -124,6 +124,7 @@ export class ProjectsService {
       donationCount: 0, // Initialize donationCount
       viewCount: 0, // Initialize viewCount
       createdById: user.id,
+      isPinned: createProjectDto.isPinned ?? false,
       // viewCount, donationCount, createdById, etc. remain default/null
     });
 
@@ -157,6 +158,22 @@ export class ProjectsService {
         createdAt: 'DESC',
       },
     });
+  }
+
+  async findAllPaginated(
+    limit = 10,
+    offset = 0,
+  ): Promise<{ data: Project[]; total: number }> {
+    const [data, total] = await this.projectRepository.findAndCount({
+      relations: ['category', 'country', 'continent', 'media'],
+      order: {
+        isPinned: 'DESC',
+        createdAt: 'DESC',
+      },
+      take: limit,
+      skip: offset,
+    });
+    return { data, total };
   }
 
   async findOne(id: string): Promise<Project> {

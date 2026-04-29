@@ -54,6 +54,17 @@ export class DonationsController {
     return this.donationsService.findAll();
   }
 
+  @Public()
+  @Get('paginated')
+  findAllPaginated(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 10;
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    return this.donationsService.findAllPaginated(parsedLimit, parsedOffset);
+  }
+
   @Get('project/:projectId')
   findByProject(
     @Param('projectId', ParseUUIDPipe, ProjectExistsPipe) projectId: string,

@@ -190,7 +190,7 @@ export class AppConfigService {
   get myFatoorahApiUrl(): string {
     return (
       this.configService.getOrThrow<string>('MYFATOORAH_API_URL') ||
-      'https://apitest.myfatoorah.com/v2/'
+      'https://apitest.myfatoorah.com/v3/'
     );
   }
   get myFatoorahCallbackUrl(): string {

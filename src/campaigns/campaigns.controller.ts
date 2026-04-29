@@ -9,6 +9,7 @@ import {
   Patch,
   ParseUUIDPipe,
   Request,
+  Query,
 } from '@nestjs/common';
 import { CampaignsService } from './campaigns.service';
 import { CreateCampaignDto } from './dto/createCampaignDto';
@@ -20,6 +21,7 @@ import { Role } from '../common/constants/roles.constant';
 import { CampaignStatus } from '../common/constants/campaignStatus.constant';
 import { CampaignExistsPipe } from '../common/pipes/campaignExists.pipe'; // Need to create this pipe
 import { User } from '../user/entities/user.entity';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('campaigns')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -42,6 +44,17 @@ export class CampaignsController {
   @Get()
   findAll() {
     return this.campaignsService.findAll();
+  }
+
+  @Public()
+  @Get('paginated')
+  findAllPaginated(
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 10;
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    return this.campaignsService.findAllPaginated(parsedLimit, parsedOffset);
   }
 
   @Get(':id')

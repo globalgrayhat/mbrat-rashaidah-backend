@@ -20,10 +20,17 @@ import { DonationStatusEnum } from '../../common/constants/donationStatus.consta
 @Index(['campaignId'])
 @Index(['donorId'])
 @Index(['status'])
-@Index(['createdAt'])
 export class Donation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  /**
+   * Optional idempotency key to prevent duplicate donations on client retry.
+   * If provided by client, stores uniquely to allow idempotent creation.
+   * This field is optional - only used when client provides idempotencyKey.
+   */
+  @Column({ type: 'varchar', length: 100, nullable: true, unique: true })
+  idempotencyKey?: string;
 
   /**
    * The donation amount.
