@@ -1,13 +1,13 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { OutboxService } from './outbox.service';
+import { OutboxService, DonationPaymentInitPayload } from './outbox.service';
 import { OutboxStatus, OutboxEvent } from '../entities/outbox-event.entity';
 import { PaymentService } from '../../../payment/payment.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
 import { Donation } from '../../../donations/entities/donation.entity';
 import { Payment } from '../../../payment/entities/payment.entity';
-import { createPaymentForEntity } from '../../../payment/common/utils/payment.utils';
+import { createLocalPaymentForEntityFromResult } from '../../../payment/common/utils/payment.utils';
 
 @Injectable()
 export class OutboxProcessorService {
@@ -45,6 +45,14 @@ export class OutboxProcessorService {
 
     for (const event of stuckEvents) {
       const correlationId = event.payload.correlationId || 'RECOVERY';
+      
+      // Step 1: Atomic Claim
+      const claimed = await this.outboxService.claimEvent(event.id);
+      if (!claimed) {
+        this.logger.debug(`[${correlationId}] Event ${event.id} already claimed by another worker.`);
+        continue;
+      }
+
       try {
         await this.reconcileEvent(event, correlationId);
       } catch (error) {
@@ -61,62 +69,76 @@ export class OutboxProcessorService {
    * Reconciles a single outbox event with the payment gateway and local database
    */
   private async reconcileEvent(event: OutboxEvent, correlationId: string) {
-    const { donationIds, paymentMethod } = event.payload;
+    const payload = event.payload as DonationPaymentInitPayload;
+    const { donationIds, providerInvoiceId, transactionId, providerPaymentId } = payload;
 
-    // Check if event is already processed (safety)
-    if (event.status === OutboxStatus.PROCESSED) {
+    if (!donationIds || donationIds.length === 0) {
+      await this.outboxService.markAsFailed(event.id, 'No donationIds in payload');
       return;
     }
 
-    this.logger.log(
-      `[${correlationId}] Attempting recovery for donations: ${donationIds.join(', ')}`,
-    );
-
-    // 1. Check if a payment already exists for this transaction reference
-    // This is more direct than checking donations first
-    const referenceId = donationIds[0];
-    const existingPayment = await this.paymentRepository.findOne({
-      where: { transactionId: referenceId },
-    });
-
-    if (existingPayment) {
-      this.logger.log(
-        `[${correlationId}] Payment ${existingPayment.transactionId} already exists. Linking donations and resolving outbox.`,
-      );
-      await this.linkDonationsAndResolve(
-        event,
-        existingPayment,
-        donationIds,
-        correlationId,
-      );
-      return;
-    }
-
-    // 2. Check if any donation in the set is already linked
-    const existingDonations = await this.donationRepository.find({
+    // Step 2: Check if already linked
+    const donations = await this.donationRepository.find({
       where: { id: In(donationIds) },
-      select: ['id', 'paymentId'],
     });
 
-    const linkedDonation = existingDonations.find((d) => d.paymentId);
-    if (linkedDonation) {
-      this.logger.log(
-        `[${correlationId}] Donation ${linkedDonation.id} already linked. Marking outbox as processed.`,
-      );
-      await this.outboxService.markAsProcessed(event.id, undefined);
+    if (donations.length === 0) {
+      await this.outboxService.markAsFailed(event.id, 'Donations not found in database');
       return;
     }
 
-    // 3. Check with the Payment Gateway
+    const linkedPaymentId = donations.find(d => d.paymentId)?.paymentId;
+    if (linkedPaymentId) {
+      this.logger.log(`[${correlationId}] Event ${event.id} already partially or fully linked. Ensuring consistency.`);
+      const payment = await this.paymentRepository.findOne({ where: { id: linkedPaymentId } });
+      if (payment) {
+        await this.linkDonationsAndResolve(event, payment, donationIds, correlationId);
+        return;
+      }
+    }
+
+    // Step 3: Search for local payment by provider IDs
+    // DO NOT search by donationId as it is not the InvoiceId
+    const gatewayId = transactionId || providerInvoiceId || event.transactionId;
+    
+    if (gatewayId) {
+      const existingPayment = await this.paymentRepository.findOne({
+        where: [
+          { transactionId: gatewayId },
+          { mfPaymentId: providerPaymentId || gatewayId }
+        ],
+      });
+
+      if (existingPayment) {
+        this.logger.log(`[${correlationId}] Payment ${existingPayment.transactionId} found locally. Linking.`);
+        await this.linkDonationsAndResolve(event, existingPayment, donationIds, correlationId);
+        return;
+      }
+    }
+
+    // Step 4: Verify with Gateway if we have an ID
+    if (!gatewayId) {
+      this.logger.warn(`[${correlationId}] No provider reference found in outbox ${event.id}. Cannot safely recover without creating duplicate.`);
+      await this.outboxService.markAsManualReview(event.id, 'Missing provider reference; gateway check impossible');
+      return;
+    }
+
     const providerName = this.paymentService.getActiveProviderName();
+    const keyType =
+      providerPaymentId && gatewayId === providerPaymentId
+        ? 'PaymentId'
+        : gatewayId.startsWith('07')
+          ? 'PaymentId'
+          : 'InvoiceId';
+
     this.logger.debug(
-      `[${correlationId}] Verifying status with ${providerName} for reference ${referenceId}`,
+      `[${correlationId}] Reconciling with ${providerName} for ID ${gatewayId} (${keyType})`,
     );
 
     try {
       const statusResult = await this.paymentService.getPaymentStatus(
-        referenceId,
-        providerName,
+        gatewayId,
+        keyType,
       );
 
       if (
@@ -124,7 +146,7 @@ export class OutboxProcessorService {
         statusResult.outcome === 'pending'
       ) {
         this.logger.log(
-          `[${correlationId}] Payment found at gateway (${statusResult.outcome}). Creating local record.`,
+          `[${correlationId}] Payment exists at gateway (${statusResult.outcome}). Creating local record.`,
         );
 
         const qr = this.dataSource.createQueryRunner();
@@ -132,22 +154,25 @@ export class OutboxProcessorService {
         await qr.startTransaction();
 
         try {
-          const { payment } = await createPaymentForEntity(
-            this.paymentService,
+          // Adapt statusResult to PaymentResult format for the utility
+          const recoveredPaymentResult = {
+            id: statusResult.transactionId,
+            url: payload.paymentUrl || '',
+            status: statusResult.outcome || 'pending',
+            rawResponse: statusResult.raw,
+            paymentId: statusResult.paymentId, // Pass this so utility can extract mfPaymentId
+          };
+
+          // Use the PURE utility to create record from existing result
+          const { payment } = await createLocalPaymentForEntityFromResult(
             qr.manager.getRepository(Payment),
             {
-              entityId: referenceId,
-              amount: statusResult.amount || 0,
-              currency: statusResult.currency || 'KWD',
-              description: `Recovered payment for ${donationIds.length} items`,
-              customerName: 'Recovered Customer',
-              paymentMethodId: paymentMethod,
-              metadata: {
-                correlationId,
-                recoveredFrom: event.id,
-                entityType: 'donation',
-              },
+              amount: statusResult.amount || payload.totalAmount,
+              currency: statusResult.currency || payload.currency,
+              customerName: 'Recovered Donor',
+              paymentMethodId: payload.paymentMethod,
             },
+            recoveredPaymentResult as any,
           );
 
           await qr.manager.update(
@@ -156,14 +181,17 @@ export class OutboxProcessorService {
             { paymentId: payment.id },
           );
 
-          await this.outboxService.markAsProcessed(
+          const success = await this.outboxService.markAsProcessed(
             event.id,
             payment.transactionId,
             qr.manager,
           );
+
+          if (!success) throw new Error('Failed to mark outbox as processed');
+
           await qr.commitTransaction();
           this.logger.log(
-            `[${correlationId}] Recovery SUCCESSFUL for Outbox ${event.id}`,
+            `[${correlationId}] Recovery successful for outbox ${event.id}`,
           );
         } catch (innerError) {
           await qr.rollbackTransaction();
@@ -172,13 +200,12 @@ export class OutboxProcessorService {
           await qr.release();
         }
       } else if (statusResult.outcome === 'failed') {
-        await this.outboxService.markAsFailed(
-          event.id,
-          'Payment failed at gateway',
-        );
+        this.logger.warn(`[${correlationId}] Gateway returned FAILED for ${gatewayId}.`);
+        await this.outboxService.markAsFailed(event.id, 'Payment failed at gateway');
       }
     } catch (gatewayError) {
-      throw gatewayError;
+      this.logger.error(`[${correlationId}] Gateway reconciliation failed: ${gatewayError.message}`);
+      throw gatewayError; // Let incrementRetry handle it
     }
   }
 
@@ -195,16 +222,23 @@ export class OutboxProcessorService {
     await qr.connect();
     await qr.startTransaction();
     try {
+      // Idempotent update
       await qr.manager.update(
         Donation,
         { id: In(donationIds) },
         { paymentId: payment.id },
       );
-      await this.outboxService.markAsProcessed(
+
+      const success = await this.outboxService.markAsProcessed(
         event.id,
         payment.transactionId,
         qr.manager,
       );
+
+      if (!success) {
+        this.logger.warn(`[${correlationId}] Outbox ${event.id} already processed or status changed.`);
+      }
+
       await qr.commitTransaction();
     } catch (error) {
       await qr.rollbackTransaction();

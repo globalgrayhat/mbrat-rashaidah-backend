@@ -9,9 +9,10 @@ import {
 
 export enum OutboxStatus {
   PENDING = 'pending',
+  PROCESSING = 'processing',
   PROCESSED = 'processed',
   FAILED = 'failed',
-  RESOLVED_MANUALLY = 'resolved_manually',
+  MANUAL_REVIEW = 'manual_review',
 }
 
 @Entity('outbox_events')

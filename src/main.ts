@@ -10,7 +10,9 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 async function bootstrap() {
   // Create the NestJS application with Express platform (for static files)
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
 
   // Get AppConfigService instance from DI container
   const configService = app.get(AppConfigService);

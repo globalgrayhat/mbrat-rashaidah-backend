@@ -64,6 +64,21 @@ export class PaymentReconciliationService implements OnModuleDestroy {
    */
   private readonly oldestEntriesThreshold = 1000; // Clean up in batches
 
+  /**
+   * In-memory lock to prevent concurrent processing of the same payment
+   */
+  private readonly processingLocks = new Set<string>();
+
+  private tryLock(paymentId: string): boolean {
+    if (this.processingLocks.has(paymentId)) return false;
+    this.processingLocks.add(paymentId);
+    return true;
+  }
+
+  private unlock(paymentId: string): void {
+    this.processingLocks.delete(paymentId);
+  }
+
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
@@ -280,7 +295,7 @@ export class PaymentReconciliationService implements OnModuleDestroy {
     // 2. Also check database for pending payments older than threshold
     const dbPendingPayments = await this.paymentRepository
       .createQueryBuilder('payment')
-      .where('LOWER(payment.status) = :status', { status: 'pending' })
+      .where('payment.status = :status', { status: 'pending' })
       .andWhere('payment.createdAt < :threshold', { threshold: thresholdDate })
       .orderBy('payment.createdAt', 'ASC')
       .limit(100)
@@ -316,34 +331,27 @@ export class PaymentReconciliationService implements OnModuleDestroy {
 
     // 3. Process payments from cache first (using discovery time)
     for (const tempPayment of cachePaymentsToReconcile) {
+      if (!this.tryLock(tempPayment.paymentId)) continue;
+      
       try {
         // Fetch full payment entity from database
         const payment = await this.paymentRepository.findOne({
           where: { id: tempPayment.paymentId },
         });
 
-        if (!payment) {
-          // Payment not found in database, remove from cache
+        if (!payment || payment.status !== 'pending') {
+          // Payment not found or already processed
           this.temporaryPaymentsCache.delete(tempPayment.paymentId);
-          this.logger.warn(
-            `Payment ${tempPayment.paymentId} found in cache but not in database, removed from cache`,
-          );
           continue;
         }
 
-        // Use discovery time instead of creation time for timeout calculation
         const result = await this.reconcileSinglePayment(
           payment,
           tempPayment.discoveredAt,
         );
-        if (result.updated) {
-          updated++;
-          // Remove from cache after successful reconciliation
-          this.temporaryPaymentsCache.delete(tempPayment.paymentId);
-        }
-        if (result.markedAsFailed) {
-          failed++;
-          // Remove from cache after marking as failed
+        if (result.updated || result.markedAsFailed) {
+          updated += result.updated ? 1 : 0;
+          failed += result.markedAsFailed ? 1 : 0;
           this.temporaryPaymentsCache.delete(tempPayment.paymentId);
         }
       } catch (error) {
@@ -352,14 +360,26 @@ export class PaymentReconciliationService implements OnModuleDestroy {
           `Failed to reconcile payment ${tempPayment.paymentId} from cache:`,
           error instanceof Error ? error.message : String(error),
         );
-        // Continue with next payment even if one fails
+      } finally {
+        this.unlock(tempPayment.paymentId);
       }
     }
 
     // 4. Process payments from database (using creation time)
     for (const payment of dbPaymentsToReconcile) {
+      if (!this.tryLock(payment.id)) continue;
+
       try {
-        const result = await this.reconcileSinglePayment(payment);
+        // Re-fetch to ensure it's still pending
+        const currentPayment = await this.paymentRepository.findOne({
+          where: { id: payment.id },
+        });
+
+        if (!currentPayment || currentPayment.status !== 'pending') {
+          continue;
+        }
+
+        const result = await this.reconcileSinglePayment(currentPayment);
         if (result.updated) {
           updated++;
         }
@@ -372,7 +392,8 @@ export class PaymentReconciliationService implements OnModuleDestroy {
           `Failed to reconcile payment ${payment.id}:`,
           error instanceof Error ? error.message : String(error),
         );
-        // Continue with next payment even if one fails
+      } finally {
+        this.unlock(payment.id);
       }
     }
 

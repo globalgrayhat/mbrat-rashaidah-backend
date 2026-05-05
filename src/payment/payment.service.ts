@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  Optional,
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
@@ -22,15 +23,19 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PaymentService.name);
   private myFatooraService: MyFatooraService | null = null;
 
-  constructor(myFatooraService?: MyFatooraService) {
-    if (myFatooraService?.isConfigured()) {
-      this.myFatooraService = myFatooraService;
-    }
+  constructor(
+    @Optional()
+    myFatooraService?: MyFatooraService,
+  ) {
+    this.myFatooraService = myFatooraService ?? null;
   }
 
   onModuleInit() {
     if (this.myFatooraService) {
-      this.logger.log('Payment Service initialized with MyFatoorah');
+      const isConfigured = this.myFatooraService.isConfigured();
+      this.logger.log(
+        `Payment Service initialized with MyFatoorah (Configured: ${isConfigured})`,
+      );
     } else {
       this.logger.warn('No payment provider configured');
     }
@@ -106,7 +111,7 @@ export class PaymentService implements OnModuleInit, OnModuleDestroy {
       return {
         provider: 'myfatoorah',
         status: 'healthy',
-        configured: true,
+        configured: this.myFatooraService.isConfigured(),
         timestamp: new Date().toISOString(),
         responseTime: Date.now() - start,
       };

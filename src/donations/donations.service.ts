@@ -8,6 +8,7 @@ import {
   NotAcceptableException,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
   Inject,
   Optional,
   forwardRef,
@@ -26,7 +27,10 @@ import { Donor } from '../donor/entities/donor.entity';
 import { User } from '../user/entities/user.entity';
 import { Payment } from '../payment/entities/payment.entity';
 
-import { MyFatooraWebhookEvent } from '../payment/common/interfaces/payment-service.interface';
+import {
+  MyFatooraWebhookEvent,
+  PaymentResult,
+} from '../payment/common/interfaces/payment-service.interface';
 import { DonationStatusEnum } from '../common/constants/donationStatus.constant';
 // PaymentMethodEnum is no longer used - payment methods are provider-specific
 // and stored as strings/numbers to support any provider's payment method IDs
@@ -38,7 +42,11 @@ import {
   OutboxEvent,
   OutboxStatus,
 } from '../common/outbox/entities/outbox-event.entity';
-import { createPaymentForEntity } from '../payment/common/utils/payment.utils';
+import {
+  createPaymentForEntity,
+  createLocalPaymentForEntityFromResult,
+  CreatePaymentResult,
+} from '../payment/common/utils/payment.utils';
 import {
   deriveOutcome,
   normalizeTxStatus,
@@ -284,7 +292,7 @@ export class DonationsService {
 
     if (outcome === 'pending') return { updatedDonations: [], outcome };
 
-    const donations = await this.donationRepository.find({
+    const donations = await em.find(Donation, {
       where: { paymentId: payment.id },
       select: ['id', 'amount', 'status', 'projectId', 'campaignId', 'paidAt'],
     });
@@ -306,7 +314,7 @@ export class DonationsService {
           : DonationStatusEnum.FAILED;
 
       if (outcome === 'paid') {
-        (d as any).paidAt = new Date();
+        (d as any).paidAt = d.paidAt || new Date();
         if (d.projectId) {
           const rec = projectDelta.get(d.projectId) || { amount: 0, count: 0 };
           rec.amount += Number(d.amount);
@@ -328,13 +336,13 @@ export class DonationsService {
 
     const [projects, campaigns] = await Promise.all([
       projectDelta.size
-        ? this.projectRepository.find({
+        ? em.find(Project, {
             where: { id: In([...projectDelta.keys()]) },
             select: ['id'], // Only need IDs to use increment
           })
         : Promise.resolve([]),
       campaignDelta.size
-        ? this.campaignRepository.find({
+        ? em.find(Campaign, {
             where: { id: In([...campaignDelta.keys()]) },
             select: ['id'], // Only need IDs to use increment
           })
@@ -495,18 +503,33 @@ export class DonationsService {
 
       // STEP 3: External Payment Integration
       const totalAmount = this.calcTotalAmount(donations);
-      const paymentPayload = this.buildPaymentPayload(
-        donations,
-        donor,
-        donorInfo,
-        currency,
-        paymentMethod,
-      );
 
-      let paymentResult;
+      let createResult: CreatePaymentResult;
       try {
         this.logger.debug(`[${correlationId}] Calling payment gateway`);
-        paymentResult = await this.paymentService.createPayment(paymentPayload);
+
+        const customerName =
+          donor?.fullName || donorInfo?.fullName || 'Anonymous Donor';
+
+        createResult = await createPaymentForEntity(
+          this.paymentService,
+          this.paymentRepository,
+          {
+            entityId: donations[0].id, // Base reference
+            amount: totalAmount,
+            currency,
+            description: `Donation for ${donations.length} items`,
+            customerName,
+            customerEmail: donor?.email || donorInfo?.email,
+            customerMobile: donor?.phoneNumber || donorInfo?.phoneNumber,
+            paymentMethodId: paymentMethod,
+            metadata: {
+              correlationId,
+              donorId: donor?.id,
+              donationIds: donations.map((d) => d.id),
+            },
+          },
+        );
       } catch (error) {
         this.logger.error(
           `[${correlationId}] Payment gateway error: ${error.message}`,
@@ -529,33 +552,33 @@ export class DonationsService {
         throw error;
       }
 
-      // STEP 4: Payment Entity & Linking (New Transaction)
+      const { payment: savedPayment, paymentResult } = createResult as any;
+
+      // ATTACH PROVIDER REFERENCE TO OUTBOX IMMEDIATELY
+      // This ensures that even if the next steps fail, recovery can find the payment at the gateway
+      await this.outboxService.attachProviderReference(
+        outboxEvent.id,
+        paymentResult.id,
+        undefined, // providerPaymentId not available yet
+        paymentResult.url,
+      ).catch(err => this.logger.warn(`Failed to attach provider reference to outbox: ${err.message}`));
+
+      // STEP 4: Link Donations to the saved Payment (New Transaction)
       const linkQr = this.dataSource.createQueryRunner();
       await linkQr.connect();
       await linkQr.startTransaction();
 
       try {
-        const paymentResultFromUtil = await createPaymentForEntity(
-          this.paymentService,
-          linkQr.manager.getRepository(Payment),
-          {
-            entityId: donations[0].id,
-            amount: totalAmount,
-            currency,
-            description: paymentPayload.description,
-            customerName: paymentPayload.customerName,
-            customerEmail: paymentPayload.customerEmail,
-            customerMobile: paymentPayload.customerMobile || undefined,
-            paymentMethodId: paymentMethod,
-            metadata: {
-              ...paymentPayload.metadata,
-              correlationId,
-              entityType: 'donation',
-            },
-          },
-        );
+        // Requirement 2.STEP 6: Verify InvoiceId matches
+        if (String(paymentResult.id) !== savedPayment.transactionId) {
+          this.logger.error(
+            `[${correlationId}] Payment mapping mismatch! Provider InvoiceId=${paymentResult.id}, Local transactionId=${savedPayment.transactionId}`,
+          );
+          throw new InternalServerErrorException(
+            'Payment mapping integrity check failed',
+          );
+        }
 
-        const savedPayment = paymentResultFromUtil.payment;
         await this.linkDonationsToPayment(
           donations,
           savedPayment,
@@ -836,105 +859,367 @@ export class DonationsService {
 
   /**
    * Handle payment webhook from payment provider
-   * Supports MyFatoorah webhooks (can be extended for other providers)
+   * Supports MyFatoorah webhooks.
+   *
+   * Fixes:
+   * - Reads TransactionStatus from Data.TransactionStatus, not webhookEvent.TransactionStatus only.
+   * - Prevents String(undefined) from becoming a fake invoice id.
+   * - Supports MyFatoorah V1/V2-like payload shapes.
+   * - Does not return 400 when local payment is not found; it tries reconciliation first.
+   * - Uses a DB transaction + pessimistic lock to reduce duplicate processing.
+   * - Avoids downgrading a paid payment to failed/pending from a late webhook.
    */
   public async handlePaymentWebhook(
     methods: string[],
     webhookEvent: MyFatooraWebhookEvent,
   ) {
+    const toNonEmptyString = (value: unknown): string | undefined => {
+      if (value === undefined || value === null) return undefined;
+
+      const text = String(value).trim();
+      if (!text) return undefined;
+
+      const lowered = text.toLowerCase();
+      if (lowered === 'undefined' || lowered === 'null' || lowered === 'nan') {
+        return undefined;
+      }
+
+      return text;
+    };
+
+    const normalizeLocalOutcome = (
+      status: unknown,
+    ): MfOutcome | 'unknown' => {
+      const value = String(status ?? '')
+        .trim()
+        .toLowerCase();
+
+      if (
+        [
+          'paid',
+          'success',
+          'successful',
+          'completed',
+          'complete',
+          'captured',
+        ].includes(value)
+      ) {
+        return 'paid';
+      }
+
+      if (
+        [
+          'failed',
+          'fail',
+          'failure',
+          'canceled',
+          'cancelled',
+          'void',
+          'expired',
+        ].includes(value)
+      ) {
+        return 'failed';
+      }
+
+      if (
+        [
+          'pending',
+          'inprogress',
+          'in_progress',
+          'processing',
+          'initiated',
+          'authorize',
+          'authorized',
+        ].includes(value)
+      ) {
+        return 'pending';
+      }
+
+      return 'unknown';
+    };
+
+    const data = (webhookEvent.Data ?? (webhookEvent as any)) as any;
+    const webhookData = (webhookEvent.Data ?? webhookEvent) as any;
+
+    const invoiceId =
+      toNonEmptyString(webhookData?.InvoiceId) ||
+      toNonEmptyString(webhookData?.Invoice?.Id) ||
+      toNonEmptyString((webhookEvent as any)?.InvoiceId) ||
+      toNonEmptyString((webhookEvent as any)?.EventEntityId);
+
+    if (!invoiceId) {
+      this.logger.warn('MyFatoorah webhook skipped: missing InvoiceId', {
+        event: (webhookEvent as any)?.Event,
+        eventName: (webhookEvent as any)?.EventName,
+        eventEntityId: (webhookEvent as any)?.EventEntityId,
+      });
+
+      return {
+        received: true,
+        success: false,
+        skipped: true,
+        reason: 'missing_invoice_id',
+      };
+    }
+
+    const payments = Array.isArray(webhookData?.Payments)
+      ? webhookData.Payments
+      : [];
+    const firstPayment = payments[0];
+
+    const providerPaymentId =
+      toNonEmptyString(firstPayment?.PaymentId) ||
+      toNonEmptyString(webhookData?.PaymentId) ||
+      toNonEmptyString(webhookData?.Transaction?.PaymentId);
+
+    const paymentMethodId =
+      toNonEmptyString(firstPayment?.PaymentMethodId) ||
+      toNonEmptyString(webhookData?.PaymentMethodId) ||
+      toNonEmptyString(webhookData?.PaymentMethod) ||
+      toNonEmptyString(webhookData?.Transaction?.PaymentMethodId);
+
+    if (paymentMethodId) {
+      this.logger.debug(
+        `Webhook received for payment method: ${paymentMethodId}`,
+      );
+    }
+
+    if (methods.length > 0) {
+      const unsupported = methods.filter(
+        (m) => !this.isSupportedPaymentMethod(m),
+      );
+
+      if (unsupported.length > 0) {
+        this.logger.warn(
+          `Webhook skipped due to unsupported payment methods: ${unsupported.join(', ')}`,
+        );
+
+        return {
+          received: true,
+          success: false,
+          skipped: true,
+          reason: 'unsupported_payment_methods',
+          unsupported,
+          invoiceId,
+        };
+      }
+    }
+
+    const rawStatuses = [
+      ...payments.map(
+        (p: any) =>
+          p?.PaymentStatus ??
+          p?.TransactionStatus ??
+          p?.Status ??
+          p?.Transaction?.Status,
+      ),
+      webhookData?.TransactionStatus,
+      webhookData?.Transaction?.Status,
+      webhookData?.InvoiceStatus,
+      webhookData?.Status,
+      (webhookEvent as any)?.TransactionStatus,
+    ]
+      .map(toNonEmptyString)
+      .filter((x): x is string => Boolean(x));
+
+    const txStatuses =
+      rawStatuses.length > 0
+        ? rawStatuses.map((status) => normalizeTxStatus(status))
+        : [normalizeTxStatus('PENDING')];
+
+    const invoiceStatus =
+      webhookData?.InvoiceStatus ??
+      webhookData?.TransactionStatus ??
+      webhookData?.Transaction?.Status ??
+      webhookData?.Status ??
+      rawStatuses[0] ??
+      'PENDING';
+
+    const outcome = deriveOutcome(invoiceStatus, txStatuses) as MfOutcome;
+
+    const whereOptions: any[] = [{ transactionId: invoiceId }];
+    if (providerPaymentId) {
+      whereOptions.push({ mfPaymentId: providerPaymentId });
+    }
+
+    let existingPayment = await this.paymentRepository.findOne({
+      where: whereOptions,
+    });
+
+    if (!existingPayment) {
+      this.logger.warn(
+        `Payment not found locally for webhook InvoiceId=${invoiceId}. Trying reconciliation recovery...`,
+      );
+
+      try {
+        const recovered = await this.reconcilePayment(invoiceId, 'InvoiceId');
+
+        return {
+          received: true,
+          success: true,
+          recovered: true,
+          invoiceId,
+          providerPaymentId,
+          outcome: (recovered as any)?.outcome ?? outcome,
+          result: recovered,
+        };
+      } catch (error) {
+        this.logger.warn(
+          `Webhook reconciliation recovery failed for InvoiceId=${invoiceId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+
+        return {
+          received: true,
+          success: false,
+          skipped: true,
+          reason: 'payment_not_found_locally',
+          invoiceId,
+          providerPaymentId,
+          outcome,
+        };
+      }
+    }
+
     const qr = this.dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
+
     try {
-      // Extract payment method from webhook event if available
-      const data = webhookEvent.Data ?? webhookEvent;
-      const paymentMethodId =
-        (data as any)?.Payments?.[0]?.PaymentMethodId ||
-        (data as any)?.PaymentMethodId;
-
-      // Accept any payment method ID from the provider
-      // Payment methods are provider-specific and can change over time
-      if (paymentMethodId) {
-        // Log for monitoring purposes
-        console.debug(
-          `Webhook received for payment method: ${paymentMethodId}`,
-        );
-      }
-
-      // If methods array is provided and not empty, validate
-      if (methods.length > 0) {
-        const unsupported = methods.filter(
-          (m) => !this.isSupportedPaymentMethod(m),
-        );
-        if (unsupported.length > 0) {
-          throw new NotAcceptableException(
-            `Unsupported payment methods: ${unsupported.join(', ')}`,
-          );
-        }
-      }
-
-      // Reuse the data variable declared above
-      const invoiceId = String((data as any).InvoiceId);
-      if (!invoiceId)
-        throw new BadRequestException('Missing invoice ID in webhook');
-
-      const payment = await this.paymentRepository.findOne({
-        where: { transactionId: invoiceId },
+      const payment = await qr.manager.findOne(Payment, {
+        where: { id: existingPayment.id },
+        lock: { mode: 'pessimistic_write' },
       });
-      if (!payment)
-        throw new NotFoundException(
-          `Payment not found for InvoiceId: ${invoiceId}`,
-        );
 
-      const firstPayment = (data as any)?.Payments?.[0];
-      if (firstPayment?.PaymentId && !(payment as any).mfPaymentId) {
-        (payment as any).mfPaymentId = String(firstPayment.PaymentId);
+      if (!payment) {
+        await qr.rollbackTransaction();
+
+        return {
+          received: true,
+          success: false,
+          skipped: true,
+          reason: 'payment_disappeared_during_processing',
+          invoiceId,
+          providerPaymentId,
+          outcome,
+        };
       }
 
-      const txStatuses = (data as any)?.Payments?.map((p: any) =>
-        normalizeTxStatus(p?.PaymentStatus),
-      ) ?? [normalizeTxStatus((webhookEvent as any)?.TransactionStatus)];
+      const currentOutcome = normalizeLocalOutcome(payment.status);
 
-      const outcome = deriveOutcome((data as any)?.InvoiceStatus, txStatuses);
+      if (providerPaymentId && !payment.mfPaymentId) {
+        payment.mfPaymentId = providerPaymentId;
+        await qr.manager.save(payment);
+      }
+
+      if (currentOutcome === 'paid' && outcome !== 'paid') {
+        await qr.commitTransaction();
+
+        this.logger.warn(
+          `Webhook ignored to avoid downgrading paid payment. InvoiceId=${invoiceId}, current=${payment.status}, incoming=${outcome}`,
+        );
+
+        return {
+          received: true,
+          success: true,
+          skipped: true,
+          reason: 'already_paid_no_downgrade',
+          invoiceId,
+          providerPaymentId,
+          currentStatus: payment.status,
+          incomingOutcome: outcome,
+        };
+      }
+
+      if (currentOutcome === outcome && outcome !== 'pending') {
+        await qr.commitTransaction();
+
+        return {
+          received: true,
+          success: true,
+          skipped: true,
+          reason: 'already_processed',
+          invoiceId,
+          providerPaymentId,
+          outcome,
+        };
+      }
+
+      const normalizedRaw = {
+        ...webhookData,
+        paymentId: providerPaymentId,
+        Payments:
+          payments.length > 0
+            ? payments
+            : providerPaymentId || webhookData?.TransactionStatus
+              ? [
+                  {
+                    PaymentId: providerPaymentId,
+                    PaymentStatus: webhookData?.TransactionStatus,
+                    PaymentMethodId: paymentMethodId,
+                  },
+                ]
+              : [],
+      };
 
       const { updatedDonations } = await this.applyPaymentOutcome(
         payment,
         outcome,
         qr.manager,
-        data, // Pass raw data for enrichment
+        normalizedRaw,
       );
 
       await qr.commitTransaction();
 
-      // Send notification asynchronously (don't await to avoid blocking)
-      const donations = await this.donationRepository.find({
-        where: { paymentId: payment.id },
-        relations: ['donor'],
-      });
-      this.sendPaymentNotification(payment, outcome, donations).catch((err) => {
-        console.error('Notification error (non-critical):', err);
-      });
+      if (outcome !== 'pending') {
+        const donations = await this.donationRepository.find({
+          where: { paymentId: payment.id },
+          relations: ['donor'],
+        });
 
-      return { success: true, outcome, updatedDonations };
-    } catch (e) {
-      await qr.rollbackTransaction();
+        this.sendPaymentNotification(payment, outcome, donations).catch(
+          (err) => {
+            this.logger.warn(
+              `Notification error after webhook processing: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          },
+        );
+      }
 
-      // Enhanced error logging
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      const errorStack = e instanceof Error ? e.stack : undefined;
+      return {
+        received: true,
+        success: true,
+        invoiceId,
+        providerPaymentId,
+        outcome,
+        updatedDonations,
+      };
+    } catch (error) {
+      if (qr.isTransactionActive) {
+        await qr.rollbackTransaction();
+      }
 
-      console.error('Webhook processing failed:', {
-        error: errorMessage,
-        stack: errorStack,
-        invoiceId: (webhookEvent.Data ?? webhookEvent)?.InvoiceId,
-      });
+      this.logger.error(
+        `Webhook processing failed for InvoiceId=${invoiceId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
 
-      throw e;
+      return {
+        received: true,
+        success: false,
+        skipped: true,
+        reason: 'webhook_processing_error',
+        message: error instanceof Error ? error.message : String(error),
+      };
     } finally {
       await qr.release();
     }
   }
-
   /** Reconcile (on-demand / cron) */
   public async reconcilePayment(
     key: string,
@@ -994,9 +1279,9 @@ export class DonationsService {
               const now = new Date();
 
               // If payment has expired, mark as failed
-              if (expiryDate < now && localPayment.status === 'Pending') {
-                // Update local payment status to Failed
-                localPayment.status = 'Failed';
+              if (expiryDate < now && localPayment.status === 'pending') {
+                // Update local payment status to failed
+                localPayment.status = 'failed';
                 await this.paymentRepository.save(localPayment);
 
                 throw new BadRequestException(
