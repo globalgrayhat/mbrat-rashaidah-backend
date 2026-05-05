@@ -324,6 +324,16 @@ export class MyFatooraService
         );
       }
 
+      if (
+        errorMessage.toLowerCase().includes('no data match') ||
+        errorMessage.toLowerCase().includes('not found') ||
+        errorMessage.toLowerCase().includes('does not exist')
+      ) {
+        throw new NotFoundException(
+          `Payment not found in MyFatoorah: ${errorMessage}`,
+        );
+      }
+
       throw new InternalServerErrorException(
         `Failed to ${operationName}: ${errorMessage}`,
       );
