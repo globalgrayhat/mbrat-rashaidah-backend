@@ -173,6 +173,18 @@ export class ProjectsService {
       );
     }
 
+    if (query.categoryId) {
+      queryBuilder.andWhere('project.categoryId = :categoryId', {
+        categoryId: query.categoryId,
+      });
+    }
+
+    if (query.countryId) {
+      queryBuilder.andWhere('project.countryId = :countryId', {
+        countryId: query.countryId,
+      });
+    }
+
     // Default sorting: Pinned first, then by pinnedOrder, then by createdAt
     queryBuilder
       .orderBy('project.isPinned', 'DESC')
@@ -328,12 +340,14 @@ export class ProjectsService {
       this.projectRepository.count({ where: { isActive: true } }),
       this.projectRepository
         .createQueryBuilder('project')
+        .where('project.isActive = :isActive', { isActive: true })
         .select('project.categoryId', 'categoryId')
         .addSelect('COUNT(*)', 'count')
         .groupBy('project.categoryId')
         .getRawMany(),
       this.projectRepository
         .createQueryBuilder('project')
+        .where('project.isActive = :isActive', { isActive: true })
         .select('project.countryId', 'countryId')
         .addSelect('COUNT(*)', 'count')
         .groupBy('project.countryId')

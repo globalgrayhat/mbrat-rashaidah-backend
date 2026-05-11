@@ -73,7 +73,6 @@ async function bootstrap() {
       persistAuthorization: true,
     },
   });
-  console.log(`Swagger is running at http://localhost:${configService.port}/api/docs`);
 
   // Apply global traffic interceptor (for logging, metrics, etc.)
   app.useGlobalInterceptors(app.get(TrafficInterceptor));
@@ -88,7 +87,8 @@ async function bootstrap() {
 
   // Log final API URL
   console.log(
-    `🚀 ${configService.appName} is running at ${protocol}://localhost:${configService.port}`,
+    `🚀 ${configService.appName} is running at ${apiUrl}/api`,
   );
+  console.log(`Swagger is running at ${apiUrl}/api/docs`);
 }
 bootstrap();

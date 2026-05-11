@@ -43,8 +43,7 @@ export class CampaignsController {
   }
 
   @ApiOperation({ summary: 'Get summary statistics for campaigns' })
-  @ApiBearerAuth()
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Public()
   @Get('stats/summary')
   getCampaignStats() {
     return this.campaignsService.getCampaignStats();

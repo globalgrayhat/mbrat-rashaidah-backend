@@ -120,6 +120,12 @@ export class CampaignsService {
       );
     }
 
+    if (query.categoryId) {
+      queryBuilder.andWhere('campaign.categoryId = :categoryId', {
+        categoryId: query.categoryId,
+      });
+    }
+
     // Default sorting: Pinned first, then by pinnedOrder, then by createdAt
     queryBuilder
       .orderBy('campaign.isPinned', 'DESC')
@@ -243,6 +249,7 @@ export class CampaignsService {
       this.campaignRepository.count({ where: { isActive: true } }),
       this.campaignRepository
         .createQueryBuilder('campaign')
+        .where('campaign.isActive = :isActive', { isActive: true })
         .select('campaign.categoryId', 'categoryId')
         .addSelect('COUNT(*)', 'count')
         .groupBy('campaign.categoryId')

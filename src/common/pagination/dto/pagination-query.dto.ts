@@ -61,12 +61,18 @@ export class PaginationQueryDto {
   @IsString()
   sortBy?: string = DEFAULT_SORT_BY;
 
-  @ApiPropertyOptional({
-    description: 'Sort order',
-    enum: SortOrder,
-    default: DEFAULT_SORT_ORDER,
-  })
+  @ApiPropertyOptional({ description: 'Sort order', enum: SortOrder, default: DEFAULT_SORT_ORDER })
   @IsOptional()
   @IsEnum(SortOrder)
   sortOrder?: SortOrder = SortOrder.DESC;
+
+  @ApiPropertyOptional({ description: 'Category ID filter' })
+  @IsOptional()
+  @IsString()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Country ID filter' })
+  @IsOptional()
+  @IsString()
+  countryId?: string;
 }
