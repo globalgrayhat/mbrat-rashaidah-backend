@@ -46,11 +46,13 @@ import { CommonPipesModule } from './common/pipes/pipes.module';
 import { Payment } from './payment/entities/payment.entity';
 import { OutboxEvent } from './common/outbox/entities/outbox-event.entity';
 import { HomeFeedService } from './common/home-feed.service';
+import { PaginationModule } from './common/pagination/pagination.module';
 
 @Module({
   imports: [
     AppConfigModule,
     CommonPipesModule,
+    PaginationModule,
     // Database connection setup using TypeORM and async config loading
     TypeOrmModule.forRootAsync({
       imports: [AppConfigModule],

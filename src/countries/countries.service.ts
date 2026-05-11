@@ -5,12 +5,16 @@ import { Country } from './entities/country.entity';
 
 import { CreateCountryDto } from './dto/create-country.dto';
 import { UpdateCountryDto } from './dto/update-country.dto';
+import { PaginationService } from '../common/pagination/pagination.service';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { CollectionResponseDto } from '../common/pagination/dto/collection-response.dto';
 
 @Injectable()
 export class CountriesService {
   constructor(
     @InjectRepository(Country)
     private readonly countryRepository: Repository<Country>,
+    private readonly paginationService: PaginationService,
   ) {}
 
   /* ---------- CREATE ---------- */
@@ -21,6 +25,30 @@ export class CountriesService {
   }
 
   /* ---------- READ ---------- */
+  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Country>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.countryRepository.createQueryBuilder('country');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(country.name LIKE :search OR country.isoCode LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    queryBuilder
+      .orderBy(`country.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
+  }
+
   findAll() {
     return this.countryRepository.find();
   }

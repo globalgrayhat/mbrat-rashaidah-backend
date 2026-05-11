@@ -7,38 +7,51 @@ import {
   Delete,
   UseGuards,
   ParseUUIDPipe,
+  Query,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
 import { IsEnum } from 'class-validator';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { ApiCollectionResponse } from '../common/pagination/decorators/api-collection-response.decorator';
+import { User } from '../user/entities/user.entity';
 
 class UpdateRoleDto {
   @IsEnum(Role)
   role: Role;
 }
 
+@ApiTags('Admin Management')
+@ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  @Get('users')
+  @ApiOperation({ summary: 'List all users (Admin view) with pagination' })
+  @ApiCollectionResponse(User)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  findAll() {
+  @Get('users')
+  findAll(@Query() query: PaginationQueryDto) {
+    // This is redundant but kept for admin-specific logic if needed.
+    // Ideally redirects or calls the same service logic as UsersController.
     return this.adminService.findAll();
   }
 
-  @Get('users/:id')
+  @ApiOperation({ summary: 'Get a user by ID (Admin view)' })
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Get('users/:id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.findOne(id);
   }
 
-  @Post('users/:id/role')
+  @ApiOperation({ summary: 'Update a user role' })
   @Roles(Role.SUPER_ADMIN)
+  @Post('users/:id/role')
   updateRole(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateRoleDto: UpdateRoleDto,
@@ -46,8 +59,9 @@ export class AdminController {
     return this.adminService.updateRole(id, updateRoleDto.role);
   }
 
-  @Delete('users/:id')
+  @ApiOperation({ summary: 'Delete a user' })
   @Roles(Role.SUPER_ADMIN)
+  @Delete('users/:id')
   deleteUser(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.deleteUser(id);
   }

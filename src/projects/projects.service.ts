@@ -13,8 +13,11 @@ import { Country } from '../countries/entities/country.entity';
 import { Continent } from '../continents/entities/continent.entity';
 import { Media } from '../media/entities/media.entity';
 import { ProjectStatus } from '../common/constants/project.constant';
-import { User } from 'src/user/entities/user.entity';
-// import { Donation } from '../donations/entities/donation.entity'; // Import Donation
+import { User } from '../user/entities/user.entity';
+import { PaginationService } from '../common/pagination/pagination.service';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { CollectionResponseDto } from '../common/pagination/dto/collection-response.dto';
+import { ReorderPinnedDto } from '../common/pagination/dto/reorder-pinned.dto';
 
 @Injectable()
 export class ProjectsService {
@@ -29,6 +32,7 @@ export class ProjectsService {
     private readonly continentRepository: Repository<Continent>,
     @InjectRepository(Media)
     private readonly mediaRepository: Repository<Media>,
+    private readonly paginationService: PaginationService,
   ) {}
 
   private async ensureEntityExists<T extends Record<string, any>>(
@@ -151,29 +155,56 @@ export class ProjectsService {
     }
   }
 
-  async findAll(): Promise<Project[]> {
-    return this.projectRepository.find({
-      relations: ['category', 'country', 'continent', 'media'],
-      order: {
-        createdAt: 'DESC',
-      },
-    });
+  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Project>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.projectRepository
+      .createQueryBuilder('project')
+      .leftJoinAndSelect('project.category', 'category')
+      .leftJoinAndSelect('project.country', 'country')
+      .leftJoinAndSelect('project.continent', 'continent')
+      .leftJoinAndSelect('project.media', 'media');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(project.title LIKE :search OR project.description LIKE :search OR project.slug LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    // Default sorting: Pinned first, then by pinnedOrder, then by createdAt
+    queryBuilder
+      .orderBy('project.isPinned', 'DESC')
+      .addOrderBy('project.pinnedOrder', 'ASC')
+      .addOrderBy(`project.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
   }
 
-  async findAllPaginated(
-    limit = 10,
-    offset = 0,
-  ): Promise<{ data: Project[]; total: number }> {
-    const [data, total] = await this.projectRepository.findAndCount({
-      relations: ['category', 'country', 'continent', 'media'],
-      order: {
-        isPinned: 'DESC',
-        createdAt: 'DESC',
-      },
-      take: limit,
-      skip: offset,
-    });
-    return { data, total };
+  async togglePin(id: string): Promise<Project> {
+    const project = await this.findOne(id);
+    project.isPinned = !project.isPinned;
+    // When pinning, we might want to put it at the top (order 0)
+    if (project.isPinned && project.pinnedOrder === 0) {
+      // Logic could be added here to find the current min pinnedOrder
+    }
+    return this.projectRepository.save(project);
+  }
+
+  async reorderPins(dto: ReorderPinnedDto): Promise<void> {
+    const updatePromises = dto.items.map((item) =>
+      this.projectRepository.update(item.id, {
+        pinnedOrder: item.pinnedOrder,
+        isPinned: true, // Ensure it's pinned if it's being reordered
+      }),
+    );
+    await Promise.all(updatePromises);
   }
 
   async findOne(id: string): Promise<Project> {
@@ -266,7 +297,7 @@ export class ProjectsService {
     return this.projectRepository.find({
       where: { categoryId },
       relations: ['category', 'country', 'continent', 'media'],
-      order: { createdAt: 'DESC' },
+      order: { isPinned: 'DESC', pinnedOrder: 'ASC', createdAt: 'DESC' },
     });
   }
 
@@ -274,7 +305,7 @@ export class ProjectsService {
     return this.projectRepository.find({
       where: { countryId },
       relations: ['category', 'country', 'continent', 'media'],
-      order: { createdAt: 'DESC' },
+      order: { isPinned: 'DESC', pinnedOrder: 'ASC', createdAt: 'DESC' },
     });
   }
 
@@ -282,19 +313,8 @@ export class ProjectsService {
     return this.projectRepository.find({
       where: { status },
       relations: ['category', 'country', 'continent', 'media'],
-      order: { createdAt: 'DESC' },
+      order: { isPinned: 'DESC', pinnedOrder: 'ASC', createdAt: 'DESC' },
     });
-  }
-
-  async findProjectDetails(projectId: string): Promise<Project> {
-    const project = await this.projectRepository.findOne({
-      where: { id: projectId },
-      relations: ['category', 'country', 'continent', 'media'],
-    });
-    if (!project) {
-      throw new NotFoundException(`Project with ID "${projectId}" not found.`);
-    }
-    return project;
   }
 
   async getProjectStats(): Promise<{

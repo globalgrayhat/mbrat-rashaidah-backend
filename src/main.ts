@@ -8,6 +8,8 @@ import helmet from 'helmet';
 import * as compression from 'compression';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+
 async function bootstrap() {
   // Create the NestJS application with Express platform (for static files)
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -44,11 +46,34 @@ async function bootstrap() {
   // Enable global validation pipe for DTO validation/transformation
   app.useGlobalPipes(
     new ValidationPipe({
-      // whitelist: true, // Remove properties not in DTO
-      // transform: true, // Automatically transform payloads to DTO instances
-      // forbidNonWhitelisted: true, // Throw error if unknown fields exist
+      whitelist: true, // Remove properties not in DTO
+      transform: true, // Automatically transform payloads to DTO instances
+      forbidNonWhitelisted: false, // Don't throw error if unknown fields exist to avoid breaking existing clients during refactor
+      transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  // Set global API prefix
+  app.setGlobalPrefix('api');
+
+  // Configure Swagger/OpenAPI documentation
+  const protocol = isDev ? 'http' : 'https';
+  const apiUrl = `${protocol}://${configService.apiDomain}:${configService.port}`;
+  
+  const config = new DocumentBuilder()
+    .setTitle('MBRAT Rashaidah API')
+    .setDescription('The MBRAT Rashaidah Backend API documentation')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
+  console.log(`Swagger is running at http://localhost:${configService.port}/api/docs`);
 
   // Apply global traffic interceptor (for logging, metrics, etc.)
   app.useGlobalInterceptors(app.get(TrafficInterceptor));
@@ -62,9 +87,8 @@ async function bootstrap() {
   }
 
   // Log final API URL
-  const protocol = isDev ? 'http' : 'https';
   console.log(
-    `🚀 ${configService.appName} is running at ${protocol}://${configService.apiDomain}:${configService.port}`,
+    `🚀 ${configService.appName} is running at ${protocol}://localhost:${configService.port}`,
   );
 }
 bootstrap();

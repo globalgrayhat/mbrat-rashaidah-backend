@@ -15,8 +15,10 @@ import {
   BadRequestException,
   UseGuards,
   Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { Response } from 'express';
 import { MediaService } from './media.service';
 import { CreateMediaDto } from './dto/create-media.dto';
@@ -31,20 +33,38 @@ import { Public } from '../common/decorators/public.decorator';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { ApiCollectionResponse } from '../common/pagination/decorators/api-collection-response.decorator';
+import { Media } from './entities/media.entity';
 
+@ApiTags('Media')
 @Controller('media')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
-  @Post('upload')
+  @ApiOperation({ summary: 'Upload a file' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // Max 10MB
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
           new MimeTypesValidator({
             types: [
               'image/png',
@@ -61,20 +81,15 @@ export class MediaController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
 
-    // Fix encoding issues for filenames (e.g. Arabic names)
-    // Multer sometimes parses UTF-8 filenames as Latin1
     try {
-      file.originalname = Buffer.from(file.originalname, 'latin1').toString(
-        'utf8',
-      );
+      file.originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
     } catch (e) {
-      // Fallback to original name if conversion fails
+      // Fallback
     }
 
     const uploadDir = path.join(process.cwd(), 'uploads');
     fs.mkdirSync(uploadDir, { recursive: true });
 
-    // Use UUID to prevent file name collisions
     const fileExt = path.extname(file.originalname);
     const uniqueFileName = `${uuidv4()}${fileExt}`;
     const filePath = path.join(uploadDir, uniqueFileName);
@@ -92,30 +107,19 @@ export class MediaController {
     return this.mediaService.create(createMediaDto);
   }
 
-  @Get()
-  findAll() {
-    return this.mediaService.findAll();
-  }
-
+  @ApiOperation({ summary: 'List all media with pagination' })
+  @ApiCollectionResponse(Media)
   @Public()
-  @Get('paginated')
-  findAllPaginated(
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
-    const parsedLimit = limit ? parseInt(limit, 10) : 10;
-    const parsedOffset = offset ? parseInt(offset, 10) : 0;
-    return this.mediaService.findAllPaginated(parsedLimit, parsedOffset);
+  @Get()
+  findAll(@Query() query: PaginationQueryDto) {
+    return this.mediaService.list(query);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.mediaService.findOne(id);
-  }
-
+  @ApiOperation({ summary: 'Get media data (stream)' })
+  @Public()
   @Get(':id/data')
   async getMediaData(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
     const media = await this.mediaService.findOne(id);
@@ -135,22 +139,38 @@ export class MediaController {
     return new StreamableFile(stream);
   }
 
-  @Patch(':id')
+  @ApiOperation({ summary: 'Update media details' })
+  @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  update(@Param('id') id: string, @Body() updateMediaDto: UpdateMediaDto) {
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateMediaDto: UpdateMediaDto,
+  ) {
     return this.mediaService.update(id, updateMediaDto);
   }
 
-  @Delete(':id')
+  @ApiOperation({ summary: 'Delete media' })
+  @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  remove(@Param('id') id: string) {
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.mediaService.remove(id);
   }
 
-  @Post('fix-encoding')
+  @ApiOperation({ summary: 'Fix encoding issues for all media names' })
+  @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN)
+  @Post('fix-encoding')
   async fixEncoding() {
     return this.mediaService.fixAllEncodings();
+  }
+
+  @ApiOperation({ summary: 'Get media by ID' })
+  @Public()
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mediaService.findOne(id);
   }
 
   private getMediaTypeFromMimeType(mimeType: string): MediaType {

@@ -11,7 +11,11 @@ import { UpdateCampaignDto } from './dto/UpdateCampaignDto';
 import { Category } from '../categories/entities/category.entity';
 import { Media } from '../media/entities/media.entity';
 import { CampaignStatus } from '../common/constants/campaignStatus.constant';
-import { User } from 'src/user/entities/user.entity';
+import { User } from '../user/entities/user.entity';
+import { PaginationService } from '../common/pagination/pagination.service';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { CollectionResponseDto } from '../common/pagination/dto/collection-response.dto';
+import { ReorderPinnedDto } from '../common/pagination/dto/reorder-pinned.dto';
 
 @Injectable()
 export class CampaignsService {
@@ -22,6 +26,7 @@ export class CampaignsService {
     private readonly categoryRepository: Repository<Category>,
     @InjectRepository(Media)
     private readonly mediaRepository: Repository<Media>,
+    private readonly paginationService: PaginationService,
   ) {}
 
   private async ensureEntityExists<T extends { id: string }>(
@@ -99,27 +104,50 @@ export class CampaignsService {
     }
   }
 
-  async findAll(): Promise<Campaign[]> {
-    return this.campaignRepository.find({
-      relations: ['category', 'media'],
-      order: { createdAt: 'DESC' },
-    });
+  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Campaign>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.campaignRepository
+      .createQueryBuilder('campaign')
+      .leftJoinAndSelect('campaign.category', 'category')
+      .leftJoinAndSelect('campaign.media', 'media');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(campaign.title LIKE :search OR campaign.description LIKE :search OR campaign.slug LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    // Default sorting: Pinned first, then by pinnedOrder, then by createdAt
+    queryBuilder
+      .orderBy('campaign.isPinned', 'DESC')
+      .addOrderBy('campaign.pinnedOrder', 'ASC')
+      .addOrderBy(`campaign.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
   }
 
-  async findAllPaginated(
-    limit = 10,
-    offset = 0,
-  ): Promise<{ data: Campaign[]; total: number }> {
-    const [data, total] = await this.campaignRepository.findAndCount({
-      relations: ['category', 'media'],
-      order: {
-        isPinned: 'DESC',
-        createdAt: 'DESC',
-      },
-      take: limit,
-      skip: offset,
-    });
-    return { data, total };
+  async togglePin(id: string): Promise<Campaign> {
+    const campaign = await this.findOne(id);
+    campaign.isPinned = !campaign.isPinned;
+    return this.campaignRepository.save(campaign);
+  }
+
+  async reorderPins(dto: ReorderPinnedDto): Promise<void> {
+    const updatePromises = dto.items.map((item) =>
+      this.campaignRepository.update(item.id, {
+        pinnedOrder: item.pinnedOrder,
+        isPinned: true,
+      }),
+    );
+    await Promise.all(updatePromises);
   }
 
   async findOne(id: string): Promise<Campaign> {
@@ -193,7 +221,7 @@ export class CampaignsService {
     return this.campaignRepository.find({
       where: { categoryId },
       relations: ['category', 'media'],
-      order: { createdAt: 'DESC' },
+      order: { isPinned: 'DESC', pinnedOrder: 'ASC', createdAt: 'DESC' },
     });
   }
 
@@ -201,21 +229,8 @@ export class CampaignsService {
     return this.campaignRepository.find({
       where: { status },
       relations: ['category', 'media'],
-      order: { createdAt: 'DESC' },
+      order: { isPinned: 'DESC', pinnedOrder: 'ASC', createdAt: 'DESC' },
     });
-  }
-
-  async findCampaignDetails(campaignId: string): Promise<Campaign> {
-    const campaign = await this.campaignRepository.findOne({
-      where: { id: campaignId },
-      relations: ['category', 'media'],
-    });
-    if (!campaign) {
-      throw new NotFoundException(
-        `Campaign with ID "${campaignId}" not found.`,
-      );
-    }
-    return campaign;
   }
 
   async getCampaignStats(): Promise<{

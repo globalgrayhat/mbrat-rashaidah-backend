@@ -4,17 +4,45 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { PaginationService } from '../common/pagination/pagination.service';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { CollectionResponseDto } from '../common/pagination/dto/collection-response.dto';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly repo: Repository<User>,
+    private readonly paginationService: PaginationService,
   ) {}
 
   async create(dto: CreateUserDto): Promise<User> {
     const user = this.repo.create(dto);
     return this.repo.save(user);
+  }
+
+  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<User>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.repo.createQueryBuilder('user');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(user.username LIKE :search OR user.email LIKE :search OR user.fullName LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    queryBuilder
+      .orderBy(`user.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
   }
 
   async findAll(): Promise<User[]> {

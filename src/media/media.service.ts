@@ -6,12 +6,16 @@ import * as path from 'path';
 import { Media } from './entities/media.entity';
 import { CreateMediaDto } from './dto/create-media.dto';
 import { UpdateMediaDto } from './dto/update-media.dto';
+import { PaginationService } from '../common/pagination/pagination.service';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { CollectionResponseDto } from '../common/pagination/dto/collection-response.dto';
 
 @Injectable()
 export class MediaService {
   constructor(
     @InjectRepository(Media)
     private readonly mediaRepository: Repository<Media>,
+    private readonly paginationService: PaginationService,
   ) {}
 
   async create(createMediaDto: CreateMediaDto): Promise<Media> {
@@ -23,6 +27,30 @@ export class MediaService {
     return await this.mediaRepository.save(media);
   }
 
+  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Media>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.mediaRepository.createQueryBuilder('media');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(media.name LIKE :search OR media.path LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    queryBuilder
+      .orderBy(`media.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
+  }
+
   async findAll(): Promise<Media[]> {
     return await this.mediaRepository.find({
       order: {
@@ -30,21 +58,6 @@ export class MediaService {
         createdAt: 'DESC',
       },
     });
-  }
-
-  async findAllPaginated(
-    limit = 10,
-    offset = 0,
-  ): Promise<{ data: Media[]; total: number }> {
-    const [data, total] = await this.mediaRepository.findAndCount({
-      order: {
-        displayOrder: 'ASC',
-        createdAt: 'DESC',
-      },
-      take: limit,
-      skip: offset,
-    });
-    return { data, total };
   }
 
   async findOne(id: string): Promise<Media> {

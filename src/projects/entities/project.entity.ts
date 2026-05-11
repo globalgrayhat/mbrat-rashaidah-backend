@@ -110,6 +110,9 @@ export class Project {
   @Column({ default: false })
   isPinned: boolean;
 
+  @Column('int', { default: 0 })
+  pinnedOrder: number;
+
   @Column({ default: true })
   isTargetAmountActive: boolean;
 

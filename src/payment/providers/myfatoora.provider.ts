@@ -473,15 +473,38 @@ export class MyFatooraService
       'Get MyFatoorah payment status',
     );
 
-    const transactionStatuses =
-      data.Payments?.map((t) => t?.PaymentStatus) ?? [];
+    console.log('[DEBUG] GetPaymentStatus Response:', {
+      InvoiceId: data.InvoiceId,
+      InvoiceStatus: data.InvoiceStatus,
+      Payments: data.Payments?.map((p) => ({
+        PaymentId: p.PaymentId,
+        PaymentStatus: p.PaymentStatus,
+      })),
+    });
+
+    const transactionStatuses = [
+      ...(data.Payments?.map((p) => p?.PaymentStatus) ?? []),
+      ...(data.InvoiceTransactions?.map((t: any) => t?.TransactionStatus) ?? []),
+      ...(data.InvoiceTransactions?.map((t: any) => t?.Status) ?? []),
+      ...((data as any).Transactions?.map((t: any) => t?.Status) ?? []),
+    ].filter(Boolean);
+
+    console.log('[DEBUG] transactionStatuses:', transactionStatuses);
+
+    const outcome = deriveOutcome(
+      data.InvoiceStatus as unknown,
+      transactionStatuses,
+    );
+
+    console.log('[DEBUG] deriveOutcome result:', {
+      InvoiceStatus: data.InvoiceStatus,
+      transactionStatuses,
+      outcome,
+    });
 
     return {
       invoiceId: String(data.InvoiceId),
-      outcome: deriveOutcome(
-        data.InvoiceStatus as unknown,
-        transactionStatuses,
-      ),
+      outcome,
       raw: data,
     };
   }

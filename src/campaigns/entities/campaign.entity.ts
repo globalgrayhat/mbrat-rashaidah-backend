@@ -151,6 +151,9 @@ export class Campaign {
   @Column({ default: false })
   isPinned: boolean;
 
+  @Column('int', { default: 0 })
+  pinnedOrder: number;
+
   /**
    * Timestamp when the campaign record was created
    */

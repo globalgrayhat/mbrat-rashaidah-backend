@@ -4,21 +4,52 @@ import { Repository } from 'typeorm';
 import { Category } from './entities/category.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { PaginationService } from '../common/pagination/pagination.service';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { CollectionResponseDto } from '../common/pagination/dto/collection-response.dto';
 
 @Injectable()
 export class CategoriesService {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  findBySlug(slug: string) {
-    throw new Error('Method not implemented.');
+  async findBySlug(slug: string): Promise<Category> {
+    const category = await this.categoryRepository.findOne({ where: { slug } });
+    if (!category) {
+      throw new NotFoundException(`Category with slug "${slug}" not found`);
+    }
+    return category;
   }
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
+    private readonly paginationService: PaginationService,
   ) {}
 
   async create(createCategoryDto: CreateCategoryDto): Promise<Category> {
     const category = this.categoryRepository.create(createCategoryDto);
     return await this.categoryRepository.save(category);
+  }
+
+  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Category>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.categoryRepository.createQueryBuilder('category');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(category.name LIKE :search OR category.slug LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    queryBuilder
+      .orderBy(`category.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
   }
 
   async findAll(): Promise<Category[]> {

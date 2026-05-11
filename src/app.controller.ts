@@ -1,9 +1,11 @@
 import { Controller, Get, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AppService } from './app.service';
 import { DataSource } from 'typeorm';
 import { Public } from './common/decorators/public.decorator';
-import { HomeFeedService } from './common/home-feed.service';
+import { PaginationQueryDto } from './common/pagination/dto/pagination-query.dto';
 
+@ApiTags('System')
 @Controller()
 export class AppController {
   constructor(
@@ -11,6 +13,8 @@ export class AppController {
     private readonly dataSource: DataSource,
   ) {}
 
+  @ApiOperation({ summary: 'Health check endpoint' })
+  @Public()
   @Get()
   getHealth(): {
     message: string;
@@ -19,15 +23,13 @@ export class AppController {
     return this.appService.getHealth();
   }
 
+  @ApiOperation({ summary: 'Get main home feed' })
   @Public()
   @Get('home/feed')
-  getHomeFeed(
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
-    const parsedLimit = limit ? parseInt(limit, 10) : 10;
-    const parsedOffset = offset ? parseInt(offset, 10) : 0;
-    return this.appService.getHomeFeed(parsedLimit, parsedOffset);
+  getHomeFeed(@Query() query: PaginationQueryDto) {
+    const limit = query.limit || 10;
+    const offset = query.offset || 0;
+    return this.appService.getHomeFeed(limit, offset);
   }
 
   @Get('recover-media')

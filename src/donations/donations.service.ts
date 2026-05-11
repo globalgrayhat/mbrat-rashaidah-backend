@@ -54,6 +54,9 @@ import {
 
 import { DonorsService } from '../donor/donor.service';
 import { v4 as uuidv4 } from 'uuid';
+import { PaginationService } from '../common/pagination/pagination.service';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { CollectionResponseDto } from '../common/pagination/dto/collection-response.dto';
 
 type MfOutcome = 'paid' | 'failed' | 'pending';
 
@@ -80,6 +83,7 @@ export class DonationsService {
     @Inject(forwardRef(() => PaymentReconciliationService))
     private readonly reconciliationService: PaymentReconciliationService,
     private readonly outboxService: OutboxService,
+    private readonly paginationService: PaginationService,
   ) {}
 
   /**
@@ -556,12 +560,18 @@ export class DonationsService {
 
       // ATTACH PROVIDER REFERENCE TO OUTBOX IMMEDIATELY
       // This ensures that even if the next steps fail, recovery can find the payment at the gateway
-      await this.outboxService.attachProviderReference(
-        outboxEvent.id,
-        paymentResult.id,
-        undefined, // providerPaymentId not available yet
-        paymentResult.url,
-      ).catch(err => this.logger.warn(`Failed to attach provider reference to outbox: ${err.message}`));
+      await this.outboxService
+        .attachProviderReference(
+          outboxEvent.id,
+          paymentResult.id,
+          undefined, // providerPaymentId not available yet
+          paymentResult.url,
+        )
+        .catch((err) =>
+          this.logger.warn(
+            `Failed to attach provider reference to outbox: ${err.message}`,
+          ),
+        );
 
       // STEP 4: Link Donations to the saved Payment (New Transaction)
       const linkQr = this.dataSource.createQueryRunner();
@@ -887,9 +897,7 @@ export class DonationsService {
       return text;
     };
 
-    const normalizeLocalOutcome = (
-      status: unknown,
-    ): MfOutcome | 'unknown' => {
+    const normalizeLocalOutcome = (status: unknown): MfOutcome | 'unknown' => {
       const value = String(status ?? '')
         .trim()
         .toLowerCase();
@@ -1256,6 +1264,15 @@ export class DonationsService {
           key,
           keyType, // forward the key type
         );
+        console.log('[DEBUG] PaymentService.getPaymentStatus result:', {
+          outcome: statusResult.outcome,
+          transactionId: statusResult.transactionId,
+          paymentId: statusResult.paymentId,
+          InvoiceStatus: statusResult.raw?.InvoiceStatus,
+          PaymentStatuses: statusResult.raw?.Payments?.map(
+            (p: any) => p.PaymentStatus,
+          ),
+        });
         outcome = statusResult.outcome as MfOutcome;
         invoiceId = statusResult.transactionId;
         raw = statusResult.raw;
@@ -1516,18 +1533,33 @@ export class DonationsService {
     });
   }
 
-  public findAllPaginated(
-    limit = 10,
-    offset = 0,
-  ): Promise<{ data: Donation[]; total: number }> {
-    return this.donationRepository
-      .findAndCount({
-        relations: ['donor', 'project', 'campaign', 'payment'],
-        order: { createdAt: 'DESC' },
-        take: limit,
-        skip: offset,
-      })
-      .then(([data, total]) => ({ data, total }));
+  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Donation>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.donationRepository
+      .createQueryBuilder('donation')
+      .leftJoinAndSelect('donation.donor', 'donor')
+      .leftJoinAndSelect('donation.project', 'project')
+      .leftJoinAndSelect('donation.campaign', 'campaign')
+      .leftJoinAndSelect('donation.payment', 'payment');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(donor.fullName LIKE :search OR donor.email LIKE :search OR project.title LIKE :search OR campaign.title LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    queryBuilder
+      .orderBy(`donation.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
   }
 
   public async findOne(id: string) {

@@ -207,6 +207,19 @@ export interface MyFatoorahGetPaymentStatusData {
     PaidCurrencyValue?: number;
     PaidCurrencyExchangeRate?: number;
   }>;
+
+  InvoiceTransactions?: Array<{
+    TransactionDate: string;
+    PaymentGateway: string;
+    ReferenceId: string;
+    TrackId: string;
+    TransactionId: string;
+    PaymentId: string;
+    AuthorizationId: string;
+    TransactionStatus: string;
+    TransationValue: string;
+    [key: string]: any;
+  }>;
 }
 export interface MyFatoorahGetPaymentStatusResponse {
   InvoiceId: number;

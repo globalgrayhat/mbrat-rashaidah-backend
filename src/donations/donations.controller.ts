@@ -10,82 +10,40 @@ import {
   Patch,
   Query,
   BadRequestException,
-  // ParseIntPipe,
 } from '@nestjs/common';
-
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { DonationsService } from './donations.service';
 import { CreateDonationDto } from './dto/create-donation.dto';
 import { UpdateDonationDto } from './dto/update-donation.dto';
-
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/constants/roles.constant';
-
-import { DonorsService } from '../donor/donor.service';
-import { CreateDonorDto } from '../donor/dto/create-donor.dto';
-import { UpdateDonorDto } from '../donor/dto/update-donor.dto';
-
 import { ProjectExistsPipe } from '../common/pipes/projectExists.pipe';
 import { CampaignExistsPipe } from '../common/pipes/campaignExists.pipe';
 import { DonorExistsPipe } from '../common/pipes/donorExists.pipe';
 import { DonationExistsPipe } from '../common/pipes/donationExists.pipe';
-
 import { MyFatooraWebhookEvent } from '../payment/common/interfaces/payment-service.interface';
 import { Public } from '../common/decorators/public.decorator';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { ApiCollectionResponse } from '../common/pagination/decorators/api-collection-response.decorator';
+import { Donation } from './entities/donation.entity';
 
+@ApiTags('Donations')
 @Controller('donations')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DonationsController {
-  constructor(
-    private readonly donationsService: DonationsService,
-    private readonly donorsService: DonorsService,
-  ) {}
+  constructor(private readonly donationsService: DonationsService) {}
 
+  @ApiOperation({ summary: 'List all donations with pagination' })
+  @ApiCollectionResponse(Donation)
   @Public()
-  @Post()
-  createDonation(@Body() dto: CreateDonationDto) {
-    return this.donationsService.create(dto);
-  }
-
   @Get()
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  findAll() {
-    return this.donationsService.findAll();
+  findAll(@Query() query: PaginationQueryDto) {
+    return this.donationsService.list(query);
   }
 
-  @Public()
-  @Get('paginated')
-  findAllPaginated(
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
-    const parsedLimit = limit ? parseInt(limit, 10) : 10;
-    const parsedOffset = offset ? parseInt(offset, 10) : 0;
-    return this.donationsService.findAllPaginated(parsedLimit, parsedOffset);
-  }
-
-  @Get('project/:projectId')
-  findByProject(
-    @Param('projectId', ParseUUIDPipe, ProjectExistsPipe) projectId: string,
-  ) {
-    return this.donationsService.findByProject(projectId);
-  }
-
-  @Get('campaign/:campaignId')
-  findByCampaign(
-    @Param('campaignId', ParseUUIDPipe, CampaignExistsPipe) campaignId: string,
-  ) {
-    return this.donationsService.findByCampaign(campaignId);
-  }
-
-  @Get('donor/:donorId')
-  findByDonor(
-    @Param('donorId', ParseUUIDPipe, DonorExistsPipe) donorId: string,
-  ) {
-    return this.donationsService.findByDonor(donorId);
-  }
-
+  @ApiOperation({ summary: 'Reconcile payment status' })
   @Public()
   @Get('payment-status')
   getAndReconcile(
@@ -98,83 +56,80 @@ export class DonationsController {
     if (!finalKey) {
       throw new BadRequestException('Missing key, paymentId, or Id');
     }
-
-    // If paymentId or Id is used, it's usually a MyFatoorah PaymentId redirect
     const finalType = paymentId || id ? 'PaymentId' : type;
-
     return this.donationsService.reconcilePayment(finalKey, finalType);
   }
 
+  @ApiOperation({ summary: 'Reconcile payment by invoice ID' })
   @Public()
   @Get('payment-status/invoice/:invoiceId')
   getAndReconcileByInvoiceId(@Param('invoiceId') invoiceId: string) {
-    if (!invoiceId) {
-      throw new BadRequestException('Missing invoiceId');
-    }
     return this.donationsService.reconcilePayment(invoiceId, 'InvoiceId');
   }
 
+  @ApiOperation({ summary: 'Reconcile payment by payment ID' })
   @Public()
   @Get('payment-status/payment/:paymentId')
   getAndReconcileByPaymentId(@Param('paymentId') paymentId: string) {
-    if (!paymentId) {
-      throw new BadRequestException('Missing paymentId');
-    }
     return this.donationsService.reconcilePayment(paymentId, 'PaymentId');
   }
 
+  @ApiOperation({ summary: 'Handle payment webhook' })
   @Public()
   @Post('payment/webhook')
   myFatoorahWebhook(@Body() body: MyFatooraWebhookEvent) {
-    // Payment methods are provider-specific and validated by the provider
-    // Pass empty array to accept any payment method from the provider
-    // The provider (MyFatoorah, Stripe, PayMob, etc.) handles validation
-    const supported: string[] = [];
-    return this.donationsService.handlePaymentWebhook(supported, body);
+    return this.donationsService.handlePaymentWebhook([], body);
   }
 
-  @Get('payment/:paymentId')
+  @ApiOperation({ summary: 'Find donation by payment ID' })
+  @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Get('payment/:paymentId')
   findByPayment(@Param('paymentId') paymentId: string) {
     return this.donationsService.findByPayment(paymentId);
   }
 
-  @Post('donors')
+  @ApiOperation({ summary: 'Find donations by project' })
+  @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  createDonor(@Body() dto: CreateDonorDto) {
-    return this.donorsService.create(dto);
-  }
-  @Get('donors')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  findAllDonors() {
-    return this.donorsService.findAll();
-  }
-  @Get('donors/:id')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  findOneDonor(@Param('id', ParseUUIDPipe, DonorExistsPipe) id: string) {
-    return this.donorsService.findOne(id);
-  }
-  @Patch('donors/:id')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  updateDonor(
-    @Param('id', ParseUUIDPipe, DonorExistsPipe) id: string,
-    @Body() dto: UpdateDonorDto,
+  @Get('project/:projectId')
+  findByProject(
+    @Param('projectId', ParseUUIDPipe, ProjectExistsPipe) projectId: string,
   ) {
-    return this.donorsService.update(id, dto);
+    return this.donationsService.findByProject(projectId);
   }
-  @Delete('donors/:id')
+
+  @ApiOperation({ summary: 'Find donations by campaign' })
+  @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  removeDonor(@Param('id', ParseUUIDPipe, DonorExistsPipe) id: string) {
-    return this.donorsService.remove(id);
+  @Get('campaign/:campaignId')
+  findByCampaign(
+    @Param('campaignId', ParseUUIDPipe, CampaignExistsPipe) campaignId: string,
+  ) {
+    return this.donationsService.findByCampaign(campaignId);
   }
 
-  @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe, DonationExistsPipe) id: string) {
-    return this.donationsService.findOne(id);
+  @ApiOperation({ summary: 'Find donations by donor' })
+  @ApiBearerAuth()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Get('donor/:donorId')
+  findByDonor(
+    @Param('donorId', ParseUUIDPipe, DonorExistsPipe) donorId: string,
+  ) {
+    return this.donationsService.findByDonor(donorId);
   }
 
+  @ApiOperation({ summary: 'Create a new donation' })
+  @Public()
+  @Post()
+  createDonation(@Body() dto: CreateDonationDto) {
+    return this.donationsService.create(dto);
+  }
+
+  @ApiOperation({ summary: 'Update an existing donation' })
+  @ApiBearerAuth()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @Patch(':id')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   update(
     @Param('id', ParseUUIDPipe, DonationExistsPipe) id: string,
     @Body() dto: UpdateDonationDto,
@@ -182,9 +137,19 @@ export class DonationsController {
     return this.donationsService.update(id, dto);
   }
 
-  @Delete(':id')
+  @ApiOperation({ summary: 'Delete a donation' })
+  @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Delete(':id')
   remove(@Param('id', ParseUUIDPipe, DonationExistsPipe) id: string) {
     return this.donationsService.remove(id);
+  }
+
+  @ApiOperation({ summary: 'Get donation by ID' })
+  @ApiBearerAuth()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe, DonationExistsPipe) id: string) {
+    return this.donationsService.findOne(id);
   }
 }

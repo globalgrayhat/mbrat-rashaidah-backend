@@ -10,6 +10,9 @@ import { Donor } from './entities/donor.entity';
 import { CreateDonorDto } from './dto/create-donor.dto';
 import { UpdateDonorDto } from './dto/update-donor.dto';
 import { User } from '../user/entities/user.entity';
+import { PaginationService } from '../common/pagination/pagination.service';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { CollectionResponseDto } from '../common/pagination/dto/collection-response.dto';
 
 @Injectable()
 export class DonorsService {
@@ -18,6 +21,7 @@ export class DonorsService {
     private readonly donorRepository: Repository<Donor>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly paginationService: PaginationService,
   ) {}
 
   /**
@@ -153,6 +157,32 @@ export class DonorsService {
       });
       return this.donorRepository.save(newDonor);
     }
+  }
+
+  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Donor>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.donorRepository
+      .createQueryBuilder('donor')
+      .leftJoinAndSelect('donor.user', 'user');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(donor.fullName LIKE :search OR donor.email LIKE :search OR donor.phoneNumber LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    queryBuilder
+      .orderBy(`donor.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
   }
 
   async findAll(): Promise<Donor[]> {

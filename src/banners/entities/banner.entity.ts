@@ -60,10 +60,16 @@ export class Banner {
   isActive: boolean;
 
   /**
-   * Order for displaying the banner relative to others
+   * Flag indicating if the banner is pinned
+   */
+  @Column({ default: false })
+  isPinned: boolean;
+
+  /**
+   * Order for displaying the banner when pinned
    */
   @Column('int', { default: 0 })
-  displayOrder: number;
+  pinnedOrder: number;
 
   /**
    * Timestamp when the banner record was created
