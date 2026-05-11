@@ -115,4 +115,11 @@ export class CampaignsController {
   findOne(@Param('id', ParseUUIDPipe, CampaignExistsPipe) id: string) {
     return this.campaignsService.findOne(id);
   }
+
+  @ApiOperation({ summary: 'Increment view count for a campaign' })
+  @Public()
+  @Post(':id/view')
+  incrementView(@Param('id', ParseUUIDPipe, CampaignExistsPipe) id: string) {
+    return this.campaignsService.incrementViewCount(id);
+  }
 }

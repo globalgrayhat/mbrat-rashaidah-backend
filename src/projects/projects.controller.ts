@@ -123,4 +123,11 @@ export class ProjectsController {
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.projectsService.findOne(id);
   }
+
+  @ApiOperation({ summary: 'Increment view count for a project' })
+  @Public()
+  @Post(':id/view')
+  incrementView(@Param('id', ParseUUIDPipe, ProjectExistsPipe) id: string) {
+    return this.projectsService.incrementViewCount(id);
+  }
 }

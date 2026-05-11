@@ -113,6 +113,9 @@ export class CampaignsService {
       .leftJoinAndSelect('campaign.category', 'category')
       .leftJoinAndSelect('campaign.media', 'media');
 
+    queryBuilder.andWhere('campaign.isActive = :isActive', { isActive: true });
+    queryBuilder.andWhere('campaign.status = :status', { status: CampaignStatus.ACTIVE });
+
     if (search) {
       queryBuilder.andWhere(
         '(campaign.title LIKE :search OR campaign.description LIKE :search OR campaign.slug LIKE :search)',
@@ -165,6 +168,11 @@ export class CampaignsService {
       throw new NotFoundException(`Campaign with ID "${id}" not found.`);
     }
     return campaign;
+  }
+
+  async incrementViewCount(id: string): Promise<{ success: boolean }> {
+    await this.campaignRepository.increment({ id }, 'viewCount', 1);
+    return { success: true };
   }
 
   async update(

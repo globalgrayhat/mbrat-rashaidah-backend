@@ -166,6 +166,9 @@ export class ProjectsService {
       .leftJoinAndSelect('project.continent', 'continent')
       .leftJoinAndSelect('project.media', 'media');
 
+    queryBuilder.andWhere('project.isActive = :isActive', { isActive: true });
+    queryBuilder.andWhere('project.status = :status', { status: ProjectStatus.ACTIVE });
+
     if (search) {
       queryBuilder.andWhere(
         '(project.title LIKE :search OR project.description LIKE :search OR project.slug LIKE :search)',
@@ -228,6 +231,11 @@ export class ProjectsService {
       throw new NotFoundException(`Project with ID "${id}" not found.`);
     }
     return project;
+  }
+
+  async incrementViewCount(id: string): Promise<{ success: boolean }> {
+    await this.projectRepository.increment({ id }, 'viewCount', 1);
+    return { success: true };
   }
 
   async update(
