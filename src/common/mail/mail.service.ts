@@ -19,12 +19,13 @@ export class MailService {
     });
   }
 
-  async sendMail(to: string, subject: string, text: string) {
+  async sendMail(to: string, subject: string, text: string, html?: string) {
     const mailOptions = {
       from: `"${this.configService.mailFromName}" <${this.configService.mailFrom}>`,
       to,
       subject,
       text,
+      html: html || undefined,
     };
     try {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
