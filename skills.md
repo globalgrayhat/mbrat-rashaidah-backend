@@ -327,6 +327,7 @@ The system uses a unified pagination pattern implemented in `PaginationService`.
 | 9   | `PATCH`  | `/projects/:id`                  | JWT (ADMIN) | Update project                    |
 | 10  | `DELETE` | `/projects/:id`                  | JWT (ADMIN) | Delete project                    |
 | 11  | `GET`    | `/projects/:id`                  | Public      | Get project by ID with details    |
+| 12  | `POST`   | `/projects/:id/view`             | Public      | Increment project view count      |
 
 **Query Parameters (GET /projects):**
 
@@ -385,6 +386,26 @@ The system uses a unified pagination pattern implemented in `PaginationService`.
 }
 ```
 
+**POST /projects/:id/view** - Increment View Count:
+
+- **Purpose**: Track project views for analytics and popularity ranking
+- **Path Parameters**: `id` (UUID) - Project ID
+- **Auth**: Public (no authentication required)
+- **Response**:
+
+```json
+{
+  "success": true,
+  "viewCount": 101
+}
+```
+
+- **Business Logic**:
+  - Uses `ProjectExistsPipe` to validate project exists
+  - Calls `projectsService.incrementViewCount(id)`
+  - Performs atomic SQL increment
+  - Returns updated view count
+
 ---
 
 ### 10.5 Campaigns Module (`/api/campaigns`)
@@ -401,6 +422,7 @@ The system uses a unified pagination pattern implemented in `PaginationService`.
 | 8   | `PATCH`  | `/campaigns/:id`                  | JWT (ADMIN) | Update campaign                    |
 | 9   | `DELETE` | `/campaigns/:id`                  | JWT (ADMIN) | Delete campaign                    |
 | 10  | `GET`    | `/campaigns/:id`                  | Public      | Get campaign by ID with details    |
+| 11  | `POST`   | `/campaigns/:id/view`             | Public      | Increment campaign view count      |
 
 **Query Parameters (GET /campaigns):**
 
@@ -432,6 +454,26 @@ The system uses a unified pagination pattern implemented in `PaginationService`.
   "donationGoal": 10000.0
 }
 ```
+
+**POST /campaigns/:id/view** - Increment View Count:
+
+- **Purpose**: Track campaign views for analytics and popularity ranking
+- **Path Parameters**: `id` (UUID) - Campaign ID
+- **Auth**: Public (no authentication required)
+- **Response**:
+
+```json
+{
+  "success": true,
+  "viewCount": 51
+}
+```
+
+- **Business Logic**:
+  - Uses `CampaignExistsPipe` to validate campaign exists
+  - Calls `campaignsService.incrementViewCount(id)`
+  - Performs atomic SQL increment
+  - Returns updated view count
 
 ---
 
@@ -765,6 +807,81 @@ The system uses a unified pagination pattern implemented in `PaginationService`.
 - `code`: string (unique, 2 chars)
 - `createdAt`: timestamp
 - `updatedAt`: timestamp
+
+---
+
+### 10.14 Home & System Module (`/api`)
+
+| #   | Method | Route            | Auth              | Description                                    |
+| --- | ------ | ---------------- | ----------------- | ---------------------------------------------- |
+| 1   | `GET`  | `/`              | Public            | Health check endpoint                          |
+| 2   | `GET`  | `/home/feed`     | Public            | Get main home feed with projects and campaigns |
+| 3   | `GET`  | `/recover-media` | JWT (SUPER_ADMIN) | Recover and link media to projects             |
+
+**GET /home/feed**:
+
+- Query Parameters: `page`, `limit`, `offset`, `sortBy`, `sortOrder`, `search`
+- Returns mixed content (projects, campaigns, banners) for homepage
+- Response:
+
+```json
+{
+  "data": {
+    "pinnedProjects": [...],
+    "pinnedCampaigns": [...],
+    "recentProjects": [...],
+    "recentCampaigns": [...],
+    "banners": [...]
+  },
+  "meta": { "page", "limit", "offset", "total", "totalPages", "hasNextPage", "hasPrevPage" }
+}
+```
+
+**POST /projects/:id/view**:
+
+- Path Parameters: `id` (UUID)
+- Auth: Public (no authentication required)
+- Description: Increment project view count by 1
+- Response:
+
+```json
+{
+  "success": true,
+  "viewCount": 101
+}
+```
+
+- Business Logic: Calls `projectsService.incrementViewCount(id)` which increments `viewCount` field in database using atomic SQL increment
+
+**POST /campaigns/:id/view**:
+
+- Path Parameters: `id` (UUID)
+- Auth: Public (no authentication required)
+- Description: Increment campaign view count by 1
+- Response:
+
+```json
+{
+  "success": true,
+  "viewCount": 50
+}
+```
+
+- Business Logic: Same pattern as projects - increments `viewCount` field atomically
+
+**GET /recover-media**:
+
+- Auth: JWT (SUPER_ADMIN only)
+- Description: Run media recovery process to match projects with media based on keyword mapping
+- Response:
+
+```json
+{
+  "message": "Recovery Complete",
+  "restoredProjects": 5,
+  "logs": ["Matched Project: Project Name --> [media/path]"]
+}
+```
 
 ---
 

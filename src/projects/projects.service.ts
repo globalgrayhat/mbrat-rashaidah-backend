@@ -344,11 +344,12 @@ export class ProjectsService {
     byCountry: { countryId: string; count: number }[];
   }> {
     const [total, active, byCategory, byCountry] = await Promise.all([
-      this.projectRepository.count(),
-      this.projectRepository.count({ where: { isActive: true } }),
+      this.projectRepository.count({ where: { isActive: true, status: ProjectStatus.ACTIVE } }),
+      this.projectRepository.count({ where: { isActive: true, status: ProjectStatus.ACTIVE } }),
       this.projectRepository
         .createQueryBuilder('project')
         .where('project.isActive = :isActive', { isActive: true })
+        .andWhere('project.status = :status', { status: ProjectStatus.ACTIVE })
         .select('project.categoryId', 'categoryId')
         .addSelect('COUNT(*)', 'count')
         .groupBy('project.categoryId')
@@ -356,6 +357,7 @@ export class ProjectsService {
       this.projectRepository
         .createQueryBuilder('project')
         .where('project.isActive = :isActive', { isActive: true })
+        .andWhere('project.status = :status', { status: ProjectStatus.ACTIVE })
         .select('project.countryId', 'countryId')
         .addSelect('COUNT(*)', 'count')
         .groupBy('project.countryId')

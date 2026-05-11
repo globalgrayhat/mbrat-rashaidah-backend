@@ -253,11 +253,12 @@ export class CampaignsService {
     byCategory: { categoryId: string; count: number }[];
   }> {
     const [total, active, byCategory] = await Promise.all([
-      this.campaignRepository.count(),
-      this.campaignRepository.count({ where: { isActive: true } }),
+      this.campaignRepository.count({ where: { isActive: true, status: CampaignStatus.ACTIVE } }),
+      this.campaignRepository.count({ where: { isActive: true, status: CampaignStatus.ACTIVE } }),
       this.campaignRepository
         .createQueryBuilder('campaign')
         .where('campaign.isActive = :isActive', { isActive: true })
+        .andWhere('campaign.status = :status', { status: CampaignStatus.ACTIVE })
         .select('campaign.categoryId', 'categoryId')
         .addSelect('COUNT(*)', 'count')
         .groupBy('campaign.categoryId')

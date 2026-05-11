@@ -43,8 +43,7 @@ export class ProjectsController {
   }
 
   @ApiOperation({ summary: 'Get summary statistics for projects' })
-  @ApiBearerAuth()
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Public()
   @Get('stats/summary')
   getProjectStats() {
     return this.projectsService.getProjectStats();
