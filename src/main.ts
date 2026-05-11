@@ -57,22 +57,31 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // Configure Swagger/OpenAPI documentation
+  // Use config service to determine if Swagger should be enabled
+  const shouldEnableSwagger = configService.swaggerEnabled;
+
   const protocol = isDev ? 'http' : 'https';
   const apiUrl = `${protocol}://${configService.apiDomain}:${configService.port}`;
-  
-  const config = new DocumentBuilder()
-    .setTitle('MBRAT Rashaidah API')
-    .setDescription('The MBRAT Rashaidah Backend API documentation')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
-  });
+
+  if (shouldEnableSwagger) {
+    const config = new DocumentBuilder()
+      .setTitle('MBRAT Rashaidah API')
+      .setDescription('The MBRAT Rashaidah Backend API documentation')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+    });
+
+    console.log(`Swagger is running at ${apiUrl}/api/docs`);
+  } else {
+    console.log(`Swagger is disabled (auto disabled in production)`);
+  }
 
   // Apply global traffic interceptor (for logging, metrics, etc.)
   app.useGlobalInterceptors(app.get(TrafficInterceptor));
@@ -86,9 +95,6 @@ async function bootstrap() {
   }
 
   // Log final API URL
-  console.log(
-    `🚀 ${configService.appName} is running at ${apiUrl}/api`,
-  );
-  console.log(`Swagger is running at ${apiUrl}/api/docs`);
+  console.log(`🚀 ${configService.appName} is running at ${apiUrl}/api`);
 }
 bootstrap();

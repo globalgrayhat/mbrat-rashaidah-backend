@@ -76,6 +76,16 @@ export class AppConfigService {
     return this.configService.get<string>('NODE_ENV') === 'production';
   }
 
+  /** Check if Swagger documentation should be enabled */
+  get swaggerEnabled(): boolean {
+    // Swagger is ALWAYS disabled in production for security
+    if (this.isProduction) {
+      return false;
+    }
+    // In development, Swagger is enabled by default
+    return true;
+  }
+
   /** ==================== Database Configuration ==================== */
 
   /** host */
