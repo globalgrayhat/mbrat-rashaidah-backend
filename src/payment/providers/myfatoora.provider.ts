@@ -52,6 +52,8 @@ import {
   MyFatoorahGetPaymentStatusData,
   MyFatoorahInitiatePaymentData,
   MyFatooraWebhookEvent,
+  MyFatoorahGetWebhooksRequest,
+  MyFatoorahGetWebhooksResponse,
 } from '../common/interfaces/payment-service.interface';
 import {
   IPaymentProvider,
@@ -483,10 +485,10 @@ export class MyFatooraService
     });
 
     const transactionStatuses = [
-      ...(data.Payments?.map((p) => p?.PaymentStatus) ?? []),
-      ...(data.InvoiceTransactions?.map((t: any) => t?.TransactionStatus) ?? []),
-      ...(data.InvoiceTransactions?.map((t: any) => t?.Status) ?? []),
-      ...((data as any).Transactions?.map((t: any) => t?.Status) ?? []),
+      ...(data.Payments?.map((p: any) => p?.PaymentStatus || p?.TransactionStatus) ?? []),
+      ...(data.InvoiceTransactions?.map((t: any) => t?.TransactionStatus || t?.Status) ?? []),
+      ...((data as any).Transactions?.map((t: any) => t?.Status || t?.TransactionStatus) ?? []),
+      data.InvoiceStatus,
     ].filter(Boolean);
 
     console.log('[DEBUG] transactionStatuses:', transactionStatuses);
@@ -511,6 +513,19 @@ export class MyFatooraService
 
   async getPaymentStatusByPaymentId(paymentId: string) {
     return this.getPaymentStatusInternal(paymentId, 'PaymentId');
+  }
+
+  /**
+   * Retrieves webhook events triggered by MyFatoorah.
+   * Useful for recovering missed events when the server was down.
+   */
+  async getWebhooks(params: MyFatoorahGetWebhooksRequest): Promise<MyFatoorahGetWebhooksResponse> {
+    return this.request<MyFatoorahGetWebhooksResponse>(
+      'post',
+      'GetWebhooks',
+      params,
+      'Get MyFatoorah webhooks log',
+    );
   }
 
   // ==================== IPaymentProvider Implementation ====================

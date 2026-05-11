@@ -37,9 +37,7 @@ export class AdminController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @Get('users')
   findAll(@Query() query: PaginationQueryDto) {
-    // This is redundant but kept for admin-specific logic if needed.
-    // Ideally redirects or calls the same service logic as UsersController.
-    return this.adminService.findAll();
+    return this.adminService.list(query);
   }
 
   @ApiOperation({ summary: 'Get a user by ID (Admin view)' })

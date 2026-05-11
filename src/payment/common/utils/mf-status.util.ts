@@ -13,8 +13,10 @@ export type CanonicalTxStatus =
 const PAID_TX_KEYWORDS = new Set([
   'SUCCESS',
   'SUCCSS',
+  'SUCCESSFUL',
   'CAPTURED',
   'PAID',
+  'PAIDONLINE',
   'APPROVED',
   'COMPLETED',
   'DONE',

@@ -253,3 +253,60 @@ export interface MyFatoorahGetPaymentStatusResponse {
   RecurringId?: string;
   CustomerCivilId?: string;
 }
+
+/**
+ * Request payload for GetWebhooks API
+ */
+export interface MyFatoorahGetWebhooksRequest {
+  Start?: string; // ISO 8601
+  End?: string; // ISO 8601
+  Page?: number;
+  EventType?:
+    | 'PAYMENT_STATUS_CHANGED'
+    | 'REFUND_STATUS_CHANGED'
+    | 'RECURRING_UPDATES'
+    | 'BALANCE_TRANSFERRED'
+    | 'SUPPLIER_STATUS_CHANGED'
+    | 'DISPUTE_STATUS_CHANGED'
+    | string;
+  Status?: 'Waiting' | 'Running' | 'Succeeded' | 'Failed';
+  Key?: string[];
+  KeyType?: 'InvoiceId' | 'CustomerReference' | 'WebhookReference';
+}
+
+/**
+ * Item in GetWebhooks response
+ */
+export interface MyFatoorahWebhookLogItem {
+  EndPoint: string;
+  Signature: string;
+  EventCode: number;
+  EventName: string;
+  EventEntityId: string;
+  WebhookReference: string;
+  Data: any; // The actual webhook payload
+  Status: 'Waiting' | 'Running' | 'Succeeded' | 'Failed';
+  Attempts: Array<{
+    Date: string;
+    Status: number;
+    ResponseMessage: string;
+    Duration: string;
+  }>;
+}
+
+/**
+ * Response from GetWebhooks API
+ */
+export interface MyFatoorahGetWebhooksResponse {
+  IsSuccess: boolean;
+  Message: string;
+  Data: {
+    Items: MyFatoorahWebhookLogItem[];
+    Pagination: {
+      PageSize: number;
+      PageNumber: number;
+      PagesCount: number;
+      ItemsCount: number;
+    };
+  };
+}

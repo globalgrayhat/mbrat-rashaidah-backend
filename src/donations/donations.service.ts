@@ -1021,11 +1021,14 @@ export class DonationsService {
           p?.Status ??
           p?.Transaction?.Status,
       ),
+      ...(webhookData?.InvoiceTransactions?.map((t: any) => t?.TransactionStatus || t?.Status) ?? []),
+      ...(webhookData?.Transactions?.map((t: any) => t?.TransactionStatus || t?.Status) ?? []),
       webhookData?.TransactionStatus,
       webhookData?.Transaction?.Status,
       webhookData?.InvoiceStatus,
       webhookData?.Status,
       (webhookEvent as any)?.TransactionStatus,
+      (webhookEvent as any)?.EventName, // Some V1 hooks use EventName for status
     ]
       .map(toNonEmptyString)
       .filter((x): x is string => Boolean(x));
@@ -1037,9 +1040,11 @@ export class DonationsService {
 
     const invoiceStatus =
       webhookData?.InvoiceStatus ??
+      webhookData?.Invoice?.Status ??
       webhookData?.TransactionStatus ??
       webhookData?.Transaction?.Status ??
       webhookData?.Status ??
+      rawStatuses.find(s => normalizeTxStatus(s) === 'SUCCESS') ??
       rawStatuses[0] ??
       'PENDING';
 
@@ -1649,5 +1654,62 @@ export class DonationsService {
       );
       await this.outboxService.markAsProcessed(outboxId, undefined);
     }
+  }
+
+  /**
+   * Recovers missed payments by querying MyFatoorah's webhook logs.
+   * Useful when the server was down or webhooks failed to deliver.
+   */
+  async recoverMissedPayments(hours = 24) {
+    const end = new Date();
+    const start = new Date(end.getTime() - hours * 60 * 60 * 1000);
+
+    this.logger.log(
+      `Starting webhook recovery from ${start.toISOString()} to ${end.toISOString()}...`,
+    );
+
+    // Call GetWebhooks API via provider
+    const response = await (this.paymentService as any).getWebhooks({
+      Start: start.toISOString(),
+      End: end.toISOString(),
+      Status: 'Failed', // Only look for failed deliveries
+      EventType: 'PAYMENT_STATUS_CHANGED',
+    });
+
+    if (!response.IsSuccess || !response.Data?.Items) {
+      return { recovered: 0, total: 0, message: response.Message };
+    }
+
+    const items = response.Data.Items;
+    let recoveredCount = 0;
+
+    for (const item of items) {
+      try {
+        // Construct a webhook event from the log item
+        const webhookEvent: MyFatooraWebhookEvent = {
+          Data: item.Data,
+          Event: {
+            Code: item.EventCode,
+            Name: item.EventName,
+          },
+        };
+
+        // Process it using the existing handler
+        const result = await this.handlePaymentWebhook([], webhookEvent);
+        if (result.success && !result.skipped) {
+          recoveredCount++;
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to recover webhook for EventEntityId=${item.EventEntityId}: ${error.message}`,
+        );
+      }
+    }
+
+    return {
+      recovered: recoveredCount,
+      total: items.length,
+      message: `Recovery completed. Processed ${items.length} failed webhooks, recovered ${recoveredCount} payments.`,
+    };
   }
 }

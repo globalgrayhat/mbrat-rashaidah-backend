@@ -3,16 +3,41 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../user/entities/user.entity';
 import { Role } from '../common/constants/roles.constant';
+import { PaginationQueryDto } from '../common/pagination/dto/pagination-query.dto';
+import { PaginationService } from '../common/pagination/pagination.service';
 
 @Injectable()
 export class AdminService {
   constructor(
     @InjectRepository(User)
     private readonly repo: Repository<User>,
+    private readonly paginationService: PaginationService,
   ) {}
 
-  findAll(): Promise<User[]> {
-    return this.repo.find();
+  async list(query: PaginationQueryDto) {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.repo.createQueryBuilder('user');
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(user.fullName LIKE :search OR user.email LIKE :search OR user.username LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    queryBuilder.orderBy(
+      `user.${query.sortBy || 'createdAt'}`,
+      query.sortOrder || 'DESC',
+    );
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
   }
 
   async findOne(id: string): Promise<User> {

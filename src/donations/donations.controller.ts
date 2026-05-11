@@ -81,6 +81,14 @@ export class DonationsController {
     return this.donationsService.handlePaymentWebhook([], body);
   }
 
+  @ApiOperation({ summary: 'Recover missed payments from MyFatoorah webhook logs' })
+  @ApiBearerAuth()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Post('payment/recover-webhooks')
+  recoverWebhooks(@Query('hours') hours?: number) {
+    return this.donationsService.recoverMissedPayments(hours);
+  }
+
   @ApiOperation({ summary: 'Find donation by payment ID' })
   @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
