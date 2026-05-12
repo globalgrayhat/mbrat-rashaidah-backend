@@ -155,7 +155,7 @@ export class ProjectsService {
     }
   }
 
-  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Project>> {
+async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Project>> {
     const params = this.paginationService.normalizeParams(query);
     const { skip, take, search } = params;
 
@@ -168,6 +168,50 @@ export class ProjectsService {
 
     queryBuilder.andWhere('project.isActive = :isActive', { isActive: true });
     queryBuilder.andWhere('project.status = :status', { status: ProjectStatus.ACTIVE });
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(project.title LIKE :search OR project.description LIKE :search OR project.slug LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (query.categoryId) {
+      queryBuilder.andWhere('project.categoryId = :categoryId', {
+        categoryId: query.categoryId,
+      });
+    }
+
+    if (query.countryId) {
+      queryBuilder.andWhere('project.countryId = :countryId', {
+        countryId: query.countryId,
+      });
+    }
+
+    // Default sorting: Pinned first, then by pinnedOrder, then by createdAt
+    queryBuilder
+      .orderBy('project.isPinned', 'DESC')
+      .addOrderBy('project.pinnedOrder', 'ASC')
+      .addOrderBy(`project.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
+  }
+
+  async listAllForAdmin(query: PaginationQueryDto): Promise<CollectionResponseDto<Project>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.projectRepository
+      .createQueryBuilder('project')
+      .leftJoinAndSelect('project.category', 'category')
+      .leftJoinAndSelect('project.country', 'country')
+      .leftJoinAndSelect('project.continent', 'continent')
+      .leftJoinAndSelect('project.media', 'media');
 
     if (search) {
       queryBuilder.andWhere(

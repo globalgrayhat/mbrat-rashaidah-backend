@@ -456,22 +456,19 @@ The system uses a unified pagination pattern implemented in `PaginationService`.
 ```
 
 **POST /campaigns/:id/view** - Increment View Count:
-
 - **Purpose**: Track campaign views for analytics and popularity ranking
 - **Path Parameters**: `id` (UUID) - Campaign ID
 - **Auth**: Public (no authentication required)
 - **Response**:
-
 ```json
 {
   "success": true,
   "viewCount": 51
 }
 ```
-
-- **Business Logic**:
+- **Business Logic**: 
   - Uses `CampaignExistsPipe` to validate campaign exists
-  - Calls `campaignsService.incrementViewCount(id)`
+  - Calls `campaignsService.incrementViewCount(id)` 
   - Performs atomic SQL increment
   - Returns updated view count
 

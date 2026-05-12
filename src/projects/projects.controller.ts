@@ -42,6 +42,14 @@ export class ProjectsController {
     return this.projectsService.list(query);
   }
 
+  @ApiOperation({ summary: 'List all projects for admin (including inactive)' })
+  @ApiBearerAuth()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Get('admin/all')
+  findAllForAdmin(@Query() query: PaginationQueryDto) {
+    return this.projectsService.listAllForAdmin(query);
+  }
+
   @ApiOperation({ summary: 'Get summary statistics for projects' })
   @Public()
   @Get('stats/summary')

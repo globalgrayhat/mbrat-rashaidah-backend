@@ -72,7 +72,7 @@ export class MediaService {
     return await this.mediaRepository.save(media);
   }
 
-  async remove(id: string): Promise<void> {
+async remove(id: string): Promise<void> {
     const media = await this.mediaRepository.findOne({
       where: { id },
       relations: ['projects', 'campaigns'],
@@ -108,6 +108,22 @@ export class MediaService {
 
     // 3. Finally remove the record from database
     await this.mediaRepository.delete(id);
+  }
+
+  async bulkRemove(ids: string[]): Promise<{ deletedCount: number; failedIds: string[] }> {
+    let deletedCount = 0;
+    const failedIds: string[] = [];
+
+    for (const id of ids) {
+      try {
+        await this.remove(id);
+        deletedCount++;
+      } catch (err) {
+        failedIds.push(id);
+      }
+    }
+
+    return { deletedCount, failedIds };
   }
 
   async fixAllEncodings(): Promise<{ fixedCount: number }> {

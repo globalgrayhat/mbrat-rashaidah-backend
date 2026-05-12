@@ -42,6 +42,14 @@ export class CampaignsController {
     return this.campaignsService.list(query);
   }
 
+  @ApiOperation({ summary: 'List all campaigns for admin (including inactive)' })
+  @ApiBearerAuth()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Get('admin/all')
+  findAllForAdmin(@Query() query: PaginationQueryDto) {
+    return this.campaignsService.listAllForAdmin(query);
+  }
+
   @ApiOperation({ summary: 'Get summary statistics for campaigns' })
   @Public()
   @Get('stats/summary')

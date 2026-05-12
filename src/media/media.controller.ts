@@ -150,7 +150,15 @@ export class MediaController {
     return this.mediaService.update(id, updateMediaDto);
   }
 
-  @ApiOperation({ summary: 'Delete media' })
+@ApiOperation({ summary: 'Delete media' })
+  @ApiBearerAuth()
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Delete('bulk')
+  async bulkRemove(@Body() body: { ids: string[] }) {
+    return this.mediaService.bulkRemove(body.ids);
+  }
+
+@ApiOperation({ summary: 'Delete media by ID' })
   @ApiBearerAuth()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   @Delete(':id')

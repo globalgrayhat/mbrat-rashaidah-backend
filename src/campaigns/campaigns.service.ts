@@ -104,7 +104,7 @@ export class CampaignsService {
     }
   }
 
-  async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Campaign>> {
+async list(query: PaginationQueryDto): Promise<CollectionResponseDto<Campaign>> {
     const params = this.paginationService.normalizeParams(query);
     const { skip, take, search } = params;
 
@@ -115,6 +115,42 @@ export class CampaignsService {
 
     queryBuilder.andWhere('campaign.isActive = :isActive', { isActive: true });
     queryBuilder.andWhere('campaign.status = :status', { status: CampaignStatus.ACTIVE });
+
+    if (search) {
+      queryBuilder.andWhere(
+        '(campaign.title LIKE :search OR campaign.description LIKE :search OR campaign.slug LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (query.categoryId) {
+      queryBuilder.andWhere('campaign.categoryId = :categoryId', {
+        categoryId: query.categoryId,
+      });
+    }
+
+    // Default sorting: Pinned first, then by pinnedOrder, then by createdAt
+    queryBuilder
+      .orderBy('campaign.isPinned', 'DESC')
+      .addOrderBy('campaign.pinnedOrder', 'ASC')
+      .addOrderBy(`campaign.${query.sortBy || 'createdAt'}`, query.sortOrder || 'DESC');
+
+    const [data, total] = await queryBuilder
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+
+    return this.paginationService.createResponse(data, total, query);
+  }
+
+  async listAllForAdmin(query: PaginationQueryDto): Promise<CollectionResponseDto<Campaign>> {
+    const params = this.paginationService.normalizeParams(query);
+    const { skip, take, search } = params;
+
+    const queryBuilder = this.campaignRepository
+      .createQueryBuilder('campaign')
+      .leftJoinAndSelect('campaign.category', 'category')
+      .leftJoinAndSelect('campaign.media', 'media');
 
     if (search) {
       queryBuilder.andWhere(
