@@ -163,7 +163,6 @@ export class OtpService {
             <div class="otp-container">
                 <div class="otp-label">رمز التحقق (OTP)</div>
                 <div class="otp-code" title="انقر للنسخ">${otp}</div>
-                <div class="copy-hint">💡 انقر على الرمز للنسخ</div>
             </div>
             
             <div class="expiry">
