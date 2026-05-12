@@ -23,7 +23,7 @@ async function bootstrap() {
   /* ---------- static files ---------- */
   // ②   <project root>/uploads  ⤏  http://host:port/uploads/*
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
-    prefix: '/uploads', // URL prefix
+    prefix: '/api/uploads', // URL prefix
     setHeaders() {
       // good practice: correct MIME type is set automatically by Express
       // optionally add caching headers here
